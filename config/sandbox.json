@@ -1,0 +1,11 @@
+{
+  "auth": {
+    "key": "870927feeb48c3cd7d1e90d2cfcb1cc6",
+    "secret": "mH+AZLODoKJuNpa9YmNT8IdpFb/87neenF1YrqEenJBplqXS8KqjQDC1Jkoo0V6yad8ZMTaLxsoLWM3hO2VCYw==",
+    "phrase": "Ihave2cats!"
+  },
+  "endpoints": {
+    "rest": "https://api-public.sandbox.gdax.com",
+    "socket": "wss://ws-feed-public.sandbox.gdax.com"
+  }
+}
