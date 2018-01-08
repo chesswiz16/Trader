@@ -52,7 +52,7 @@ class Trader(object):
             raise OrderPlacementFailure(result['message'])
         else:
             self.orders[result['id']] = result
-            module_logger.info('Placed sell order for {} {} @ {}'.format(size, self.product_id, price))
+        module_logger.info('Placed sell order for {} {} @ {}'.format(size, self.product_id, price))
 
     def to_increment(self, price):
         diff = price - round(price)
