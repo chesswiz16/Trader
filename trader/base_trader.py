@@ -1,3 +1,8 @@
+import logging
+
+module_logger = logging.getLogger(__name__)
+
+
 class Trader(object):
     def __init__(self, client, product_id):
         self.client = client
@@ -6,11 +11,20 @@ class Trader(object):
         products = self.client.get_products()
         product = [x for x in products if x['status'] == 'online' and x['id'] == product_id]
         if len(product) != 1:
+            module_logger.error('Product {} invalid from products {}'.format(product_id, json.dumps(products, indent=4,
+                                                                                                    sort_keys=True)))
             raise ProductDefinitionFailure(product_id + ' not active for trading')
         self.quote_increment = product[0]['quote_increment']
         # Query for current open orders
         orders = self.client.get_orders()[0]
         self.orders = dict(zip([x['id'] for x in orders], orders))
+        module_logger.info(
+            'Started trader on {} with increment {} and {} open orders'.format(product_id, self.quote_increment,
+                                                                               len(self.orders)))
+
+    # on_start
+    # on_fill
+    # Check account balance before order
 
     def buy_limit_ptc(self, size, price):
         """Post only limit buy"""
@@ -20,9 +34,11 @@ class Trader(object):
                                  size=size,
                                  post_only=True)
         if 'message' in result:
+            module_logger.exception('Error placing buy order, message from api: {}'.format(result['message']))
             raise OrderPlacementFailure(result['message'])
         else:
             self.orders[result['id']] = result
+        module_logger.info('Placed buy order for {} {} @ {}'.format(size, self.product_id, price))
 
     def sell_limit_ptc(self, size, price):
         """Post only limit sell"""
@@ -32,9 +48,11 @@ class Trader(object):
                                   size=size,
                                   post_only=True)
         if 'message' in result:
+            module_logger.exception('Error placing sell order, message from api: {}'.format(result['message']))
             raise OrderPlacementFailure(result['message'])
         else:
             self.orders[result['id']] = result
+            module_logger.info('Placed sell order for {} {} @ {}'.format(size, self.product_id, price))
 
     def to_increment(self, price):
         diff = price - round(price)

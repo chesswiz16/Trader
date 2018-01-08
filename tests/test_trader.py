@@ -1,9 +1,12 @@
 import unittest
 import uuid
+import logging
 
 from trader.base_trader import Trader
 from trader.base_trader import OrderPlacementFailure
 from trader.base_trader import ProductDefinitionFailure
+
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 
 class AuthenticatedClientMock(object):
