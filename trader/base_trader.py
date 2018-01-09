@@ -153,7 +153,7 @@ class ProductDefinitionFailure(Exception):
 if __name__ == '__main__':
     from gdax.authenticated_client import AuthenticatedClient
 
-    with open('../config/prod.json') as config:
+    with open('../config/sandbox.json') as config:
         data = json.load(config)
 
     auth_client = AuthenticatedClient(
