@@ -1,10 +1,7 @@
 import unittest
 import uuid
-import logging
 
-from trader.base_trader import Trader
-from trader.base_trader import OrderPlacementFailure
-from trader.base_trader import ProductDefinitionFailure
+from trader.base_trader import *
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
@@ -32,16 +29,22 @@ class AuthenticatedClientMock(object):
                 'status': 'online',
                 'id': 'BTC-USD',
                 'quote_increment': 0.5,
+                'base_currency': 'BTC',
+                'quote_currency': 'USD',
             },
             {
                 'status': 'online',
                 'id': 'ETH-USD',
                 'quote_increment': 0.01,
+                'base_currency': 'ETC',
+                'quote_currency': 'USD',
             },
             {
                 'status': 'offline',
                 'id': 'ETH-EUR',
                 'quote_increment': 0.1,
+                'base_currency': 'ETC',
+                'quote_currency': 'EUR',
             }
         ]
 
@@ -55,6 +58,19 @@ class AuthenticatedClientMock(object):
     def sell(self, **kwargs):
         return self.mock_trade('sell', kwargs['price'], kwargs['size'])
 
+    # noinspection PyMethodMayBeStatic
+    def get_accounts(self):
+        return [
+            {
+                'currency': 'BTC',
+                'available': "100000.001",
+            },
+            {
+                'currency': 'USD',
+                'available': "100000.001",
+            }
+        ]
+
 
 class AuthenticatedClientMockWithOrders(AuthenticatedClientMock):
     def get_orders(self):
@@ -66,6 +82,17 @@ class AuthenticatedClientMockWithOrders(AuthenticatedClientMock):
                 'price': '100',
             }
         ]]
+
+
+class AuthenticatedClientMockWithNoBalance(AuthenticatedClientMock):
+    # noinspection PyMethodMayBeStatic
+    def get_accounts(self):
+        return [
+            {
+                'currency': 'BTC',
+                'available': "0",
+            }
+        ]
 
 
 class TestTrader(unittest.TestCase):
@@ -105,6 +132,11 @@ class TestTrader(unittest.TestCase):
         trader = Trader(AuthenticatedClientMock(), 'BTC-USD')
         self.assertRaises(OrderPlacementFailure, trader.buy_limit_ptc, 200, 10)
         self.assertRaises(OrderPlacementFailure, trader.sell_limit_ptc, 200, 10)
+
+    def test_insufficient_funds(self):
+        trader = Trader(AuthenticatedClientMockWithNoBalance(), 'BTC-USD')
+        self.assertRaises(AccountBalanceFailure, trader.buy_limit_ptc, 50, 10)
+        self.assertRaises(AccountBalanceFailure, trader.sell_limit_ptc, 50, 10)
 
 
 if __name__ == '__main__':
