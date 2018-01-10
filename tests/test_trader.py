@@ -192,6 +192,116 @@ class TestTrader(unittest.TestCase):
         for order in expected:
             self.assertIn(order, [{k: x[k] for k in order.keys()} for x in trader.orders.values()])
 
+    def test_order_fill(self):
+        trader = Trader(AuthenticatedClientMock(), 'BTC-USD')
+        trader.orders = {
+            'id1': {
+                'side': 'buy',
+                'size': '20',
+                'price': '101.0',
+                'type': 'stop',
+                'post_only': False,
+            },
+            'id2': {
+                'side': 'buy',
+                'size': '20',
+                'price': '99.0',
+                'type': 'limit',
+                'post_only': True,
+            },
+            'id3': {
+                'side': 'sell',
+                'size': '10',
+                'price': '90.0',
+                'type': 'limit',
+                'post_only': True,
+            },
+        }
+        trader.available_balance = {
+            'USD': 20 * 105,
+            'BTC': 10,
+        }
+        trader.on_order_done({
+            'order_id': 'id1',
+            'type': 'done',
+            'price': '101.5',
+            'side': 'buy',
+            'reason': 'filled',
+            'remaining_size': '5',
+        })
+        self.assertEqual(trader.orders['id1']['size'], 5)
+        self.assertEqual(trader.available_balance['USD'], 577.5)
+        self.assertEqual(trader.available_balance['BTC'], 25)
+        trader.on_order_done({
+            'order_id': 'id2',
+            'type': 'done',
+            'price': '99',
+            'side': 'buy',
+            'reason': 'canceled',
+            'remaining_size': '0',
+        })
+        self.assertTrue('id2' not in trader.orders)
+        self.assertEqual(trader.available_balance['USD'], 577.5)
+        self.assertEqual(trader.available_balance['BTC'], 25)
+        trader.on_order_done({
+            'order_id': 'id3',
+            'type': 'done',
+            'price': '90',
+            'side': 'sell',
+            'reason': 'filled',
+            'remaining_size': '0',
+        })
+        self.assertTrue('id3' not in trader.orders)
+        self.assertEqual(trader.available_balance['USD'], 1477.5)
+        self.assertEqual(trader.available_balance['BTC'], 15)
+
+    def test_order_fill_failure(self):
+        trader = Trader(AuthenticatedClientMock(), 'BTC-USD')
+        trader.orders = {
+            'id3': {
+                'side': 'sell',
+                'size': '10',
+                'price': '90.0',
+                'type': 'limit',
+                'post_only': True,
+            },
+        }
+        trader.available_balance = {}
+        trader.on_order_done({
+            'order_id': 'id1',
+            'type': 'done',
+            'price': '101.5',
+            'side': 'buy',
+            'reason': 'filled',
+            'remaining_size': '5',
+        })
+        # Orders should be cleared out, balances goes back to start
+        self.assertEquals(trader.orders, {})
+        self.assertEquals(trader.available_balance, {
+            'BTC': 100000.001,
+            'USD': 100000.001,
+        })
+
+        # Order id correct but type is wrong
+        trader = Trader(AuthenticatedClientMock(), 'BTC-USD')
+        trader.orders = {
+            'id3': {
+                'side': 'sell',
+                'size': '10',
+                'price': '90.0',
+                'type': 'limit',
+                'post_only': True,
+            },
+        }
+        trader.available_balance = {}
+        trader.on_order_done({
+            'order_id': 'id2',
+            'price': '101.5',
+            'side': 'buy',
+            'reason': 'filled',
+            'remaining_size': '5',
+        })
+
 
 if __name__ == '__main__':
     unittest.main()
