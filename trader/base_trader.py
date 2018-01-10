@@ -1,5 +1,5 @@
-import logging
 import json
+import logging
 
 module_logger = logging.getLogger(__name__)
 
@@ -21,6 +21,17 @@ class Trader(object):
         self.quote_increment = float(product[0]['quote_increment'])
         self.base_min_size = float(product[0]['base_min_size'])
         self.base_max_size = float(product[0]['base_max_size'])
+        self.available_balance = {}
+
+        # Query for account balances
+        accounts = self.client.get_accounts()
+        for currency in [self.base_currency, self.quote_currency]:
+            account = [x for x in accounts if x['currency'] == currency]
+            if len(account) != 1 or 'available' not in account[0]:
+                module_logger.error('Account lookup failure for {} from {}'.format(
+                    currency, json.dumps(accounts, indent=4, sort_keys=True)))
+                raise AccountBalanceFailure(currency + ' not found in active accounts')
+            self.available_balance[currency] = float(account[0]['available'])
 
         # Query for current open orders
         orders = self.client.get_orders()[0]
@@ -44,8 +55,6 @@ class Trader(object):
             'Seeding wallet: {} {} @ {}/{}'.format(size, self.product_id, current_price + delta, current_price - delta))
         self.buy_stop(size, current_price + delta)
         self.buy_limit_ptc(size, current_price - delta)
-
-    # on_fill
 
     def buy_stop(self, size, price):
         balance = self.get_balance(self.quote_currency)
@@ -112,13 +121,7 @@ class Trader(object):
         module_logger.info('Placed sell limit order for {} {} @ {}'.format(size, self.product_id, price))
 
     def get_balance(self, currency):
-        accounts = self.client.get_accounts()
-        account = [x for x in accounts if x['currency'] == currency]
-        if len(account) != 1 or 'available' not in account[0]:
-            module_logger.error('Account lookup failure for {} from {}'.format(
-                currency, json.dumps(accounts, indent=4, sort_keys=True)))
-            raise AccountBalanceFailure(currency + ' not found in active accounts')
-        return float(account[0]['available'])
+        return self.available_balance.get(currency, 0.0)
 
     def to_increment(self, price):
         diff = price - round(price)

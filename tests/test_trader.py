@@ -76,7 +76,11 @@ class AuthenticatedClientMock(object):
             {
                 'currency': 'USD',
                 'available': "100000.001",
-            }
+            },
+            {
+                'currency': 'ETC',
+                'available': "100000.001",
+            },
         ]
 
     # noinspection PyUnusedLocal,PyMethodMayBeStatic
@@ -105,7 +109,15 @@ class AuthenticatedClientMockWithNoBalance(AuthenticatedClientMock):
             {
                 'currency': 'BTC',
                 'available': "0",
-            }
+            },
+            {
+                'currency': 'USD',
+                'available': "0",
+            },
+            {
+                'currency': 'ETC',
+                'available': "0",
+            },
         ]
 
 
