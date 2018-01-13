@@ -159,7 +159,7 @@ class TestTrader(unittest.TestCase):
         self.assertTrue(len(trader.orders) == 5)
 
     def test_bad_order(self):
-        trader = Trader(AuthenticatedClientMock(), 'BTC-USD')
+        trader = Trader(AuthenticatedClientMock(), 'ETH-USD')
         self.assertRaises(OrderPlacementFailure, trader.buy_limit_ptc, 200, 10)
         self.assertRaises(OrderPlacementFailure, trader.sell_limit_ptc, 200, 10)
         self.assertRaises(OrderPlacementFailure, trader.sell_limit_ptc, 20000, 10)
@@ -267,7 +267,7 @@ class TestTrader(unittest.TestCase):
             },
         }
         trader.available_balance = {}
-        trader.on_order_done({
+        self.assertRaises(OrderFillFailure, trader.on_order_done, {
             'order_id': 'id1',
             'type': 'done',
             'price': '101.5',
@@ -294,7 +294,7 @@ class TestTrader(unittest.TestCase):
             },
         }
         trader.available_balance = {}
-        trader.on_order_done({
+        self.assertRaises(OrderFillFailure, trader.on_order_done, {
             'order_id': 'id2',
             'price': '101.5',
             'side': 'buy',

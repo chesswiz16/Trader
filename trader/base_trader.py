@@ -126,69 +126,84 @@ class Trader(object):
         self.buy_stop(size, current_price + delta)
         self.buy_limit_ptc(size, current_price - delta)
 
-    def buy_stop(self, size, price):
-        balance = self.get_balance(self.quote_currency)
-        if balance < size * price:
-            module_logger.exception('Insufficient funds for buy of {}, current balance {}'.format(size, balance))
-            raise AccountBalanceFailure('Needed {} have {}'.format(size * price, balance))
+    def place_decaying_order(self, side, order_type, size, price, retries=3, spread=0.006):
+        """Makes a call to the rest order endpoint. On failure, tries again n times widening the bid/ask
+        by 0.6% each time in case the order would result in taking liquidity (and thus accruing fees)
+        """
         if size < self.base_min_size or size > self.base_max_size:
             raise OrderPlacementFailure('Size of {} outside of exchange limits'.format(size))
-        result = self.client.buy(
-            type='stop',
-            product_id=self.product_id,
-            price=self.to_increment(price),
-            size=size,
-        )
-        if 'message' in result:
-            module_logger.exception('Error placing buy order, message from api: {}'.format(result['message']))
-            raise OrderPlacementFailure(result['message'])
+        if side is 'buy':
+            balance = self.get_balance(self.quote_currency)
+            direction = -1
+        elif side is 'sell':
+            balance = self.get_balance(self.base_currency)
+            direction = 1
         else:
-            self.orders[result['id']] = result
-        module_logger.info('Placed buy stop order for {} {} @ {}'.format(size, self.product_id, price))
+            raise OrderPlacementFailure('Side {} not expected, what are you doing?'.format(side))
 
-    def buy_limit_ptc(self, size, price):
-        """Post only limit buy with validations"""
-        balance = self.get_balance(self.quote_currency)
-        if balance < size * price:
-            module_logger.exception('Insufficient funds for buy of {}, current balance {}'.format(size, balance))
-            raise AccountBalanceFailure('Needed {} have {}'.format(size * price, balance))
-        if size < self.base_min_size or size > self.base_max_size:
-            raise OrderPlacementFailure('Size of {} outside of exchange limits'.format(size))
-        result = self.client.buy(
-            type='limit',
-            product_id=self.product_id,
-            price=self.to_increment(price),
-            size=size,
-            post_only=True,
-        )
-        if 'message' in result:
-            module_logger.exception('Error placing buy order, message from api: {}'.format(result['message']))
-            raise OrderPlacementFailure(result['message'])
-        else:
-            self.orders[result['id']] = result
-        module_logger.info('Placed buy limit order for {} {} @ {}'.format(size, self.product_id, price))
+        for i in range(retries):
+            price = self.to_increment(price + (price * direction * i * spread))
+            if side is 'buy':
+                if balance < size * price:
+                    module_logger.exception(
+                        'Insufficient funds for buy of {}, current balance {}'.format(size, balance))
+                    raise AccountBalanceFailure('Needed {} have {}'.format(size * price, balance))
+                if order_type is 'limit':
+                    result = self.client.buy(
+                        type='limit',
+                        product_id=self.product_id,
+                        price=price,
+                        size=size,
+                        post_only=True,
+                    )
+                elif order_type is 'stop':
+                    # Stop order will accrue fees, but can't really avoid that
+                    result = self.client.buy(
+                        type='stop',
+                        product_id=self.product_id,
+                        price=price,
+                        size=size,
+                    )
+                else:
+                    raise OrderPlacementFailure('{} of type {} not supported'.format(side, order_type))
+            else:
+                if balance < size:
+                    module_logger.exception(
+                        'Insufficient funds for sell of {}, current balance {}'.format(size, balance))
+                    raise AccountBalanceFailure('Needed {} have {}'.format(size, balance))
+                if order_type is 'limit':
+                    result = self.client.sell(
+                        type='limit',
+                        product_id=self.product_id,
+                        price=price,
+                        size=size,
+                        # Post Only to avoid fees, order fails if it would result in taking liquidity
+                        post_only=True,
+                    )
+                else:
+                    raise OrderPlacementFailure('{} of type {} not supported'.format(side, order_type))
+            if 'message' in result:
+                module_logger.warning(
+                    'Error placing {} {} order for {} {} @ {}, retrying. Message from api: {}'.format(
+                        side, order_type, size, self.product_id, price, result['message']))
+            else:
+                self.orders[result['id']] = result
+                module_logger.info(
+                    'Placed {} {} order for {} {} @ {}'.format(side, order_type, size, self.product_id, price))
+                return
+        # Failed on decaying price, raise an exception
+        message = 'Error placing {} order of type {}. Retried {} times, giving up'.format(side, order_type, retries)
+        module_logger.exception(message)
+        raise OrderPlacementFailure(message)
 
-    def sell_limit_ptc(self, size, price):
-        """Post only limit sell with validations"""
-        balance = self.get_balance(self.base_currency)
-        if balance < size:
-            module_logger.exception('Insufficient funds for sell of {}, current balance {}'.format(size, balance))
-            raise AccountBalanceFailure('Needed {} have {}'.format(size, balance))
-        if size < self.base_min_size or size > self.base_max_size:
-            raise OrderPlacementFailure('Size of {} outside of exchange limits'.format(size))
-        result = self.client.sell(
-            type='limit',
-            product_id=self.product_id,
-            price=self.to_increment(price),
-            size=size,
-            post_only=True,
-        )
-        if 'message' in result:
-            module_logger.exception('Error placing sell order, message from api: {}'.format(result['message']))
-            raise OrderPlacementFailure(result['message'])
-        else:
-            self.orders[result['id']] = result
-        module_logger.info('Placed sell limit order for {} {} @ {}'.format(size, self.product_id, price))
+    def buy_stop(self, size, price, retries=3, spread=0.003):
+        self.place_decaying_order('buy', 'stop', size, price, retries=retries, spread=spread)
+
+    def buy_limit_ptc(self, size, price, retries=3, spread=0.003):
+        self.place_decaying_order('buy', 'limit', size, price, retries=retries, spread=spread)
+
+    def sell_limit_ptc(self, size, price, retries=3, spread=0.003):
+        self.place_decaying_order('sell', 'limit', size, price, retries=retries, spread=spread)
 
     def on_order_done(self, message):
         """Action to take on order fill/cancel. Base implementation simply updates the order cache and currency balances.
@@ -234,6 +249,7 @@ class Trader(object):
             # Update account/order status
             if checked_order_message['reason'] == 'canceled':
                 self.orders.pop(order_id)
+                return {}
             elif checked_order_message['reason'] == 'filled':
                 # Check fill price and remaining size
                 side = checked_order_message['side']
@@ -275,6 +291,7 @@ class Trader(object):
                         self.available_balance[self.quote_currency] += filled * price
                 else:
                     raise OrderFillFailure('Unexpected side {}, resetting order status'.format(side))
+                return checked_order_message
             else:
                 raise OrderFillFailure(
                     'Unknown order done reason {}, calling rest endpoint to reset'.format(
@@ -283,6 +300,7 @@ class Trader(object):
             module_logger.exception(e.parameter)
             self.reset_open_orders()
             self.reset_account_balances()
+            raise e
 
     def get_balance(self, currency):
         return self.available_balance.get(currency, 0.0)

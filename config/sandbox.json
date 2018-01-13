@@ -7,5 +7,9 @@
   "endpoints": {
     "rest": "https://api-public.sandbox.gdax.com",
     "socket": "wss://ws-feed-public.sandbox.gdax.com"
+  },
+  "cost_basis": {
+    "order_depth": 4,
+    "wallet_fraction": 0.8
   }
 }
