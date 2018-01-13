@@ -1,124 +1,11 @@
 import unittest
-import uuid
+from unittest.mock import MagicMock
+from unittest.mock import Mock
 
+from tests.authenticated_client_mock import AuthenticatedClientMock
 from trader.base_trader import *
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
-
-
-class AuthenticatedClientMock(object):
-    # noinspection PyMethodMayBeStatic
-    def mock_trade(self, side, price, size, order_type, post_only):
-        """Mock failures if quantity > 100"""
-        if size > 100:
-            return {
-                'message': 'mock failure',
-            }
-        else:
-            return {
-                'id': str(uuid.uuid4()),
-                'price': str(price),
-                'size': str(size),
-                'side': side,
-                'type': order_type,
-                'post_only': post_only,
-            }
-
-    # noinspection PyMethodMayBeStatic
-    def get_products(self):
-        return [
-            {
-                'status': 'online',
-                'id': 'BTC-USD',
-                'quote_increment': '0.5',
-                'base_currency': 'BTC',
-                'quote_currency': 'USD',
-                'base_min_size': '0.5',
-                'base_max_size': '10000',
-            },
-            {
-                'status': 'online',
-                'id': 'ETH-USD',
-                'quote_increment': '0.01',
-                'base_currency': 'ETC',
-                'quote_currency': 'USD',
-                'base_min_size': '0.01',
-                'base_max_size': '100000',
-            },
-            {
-                'status': 'offline',
-                'id': 'ETH-EUR',
-                'quote_increment': '0.1',
-                'base_currency': 'ETC',
-                'quote_currency': 'EUR',
-                'base_min_size': '0.01',
-                'base_max_size': '100000',
-            }
-        ]
-
-    # noinspection PyMethodMayBeStatic
-    def get_orders(self):
-        return [[]]
-
-    def buy(self, **kwargs):
-        return self.mock_trade('buy', kwargs['price'], kwargs['size'], kwargs['type'], kwargs.get('post_only', False))
-
-    def sell(self, **kwargs):
-        return self.mock_trade('sell', kwargs['price'], kwargs['size'], kwargs['type'], kwargs.get('post_only', False))
-
-    # noinspection PyMethodMayBeStatic
-    def get_accounts(self):
-        return [
-            {
-                'currency': 'BTC',
-                'available': "100000.001",
-            },
-            {
-                'currency': 'USD',
-                'available': "100000.001",
-            },
-            {
-                'currency': 'ETC',
-                'available': "100000.001",
-            },
-        ]
-
-    # noinspection PyUnusedLocal,PyMethodMayBeStatic
-    def get_product_ticker(self, product_id):
-        return {
-            'price': '100'
-        }
-
-
-class AuthenticatedClientMockWithOrders(AuthenticatedClientMock):
-    def get_orders(self):
-        return [[
-            {
-                'id': 'test_id',
-                'side': 'buy',
-                'size': '100',
-                'price': '100',
-            }
-        ]]
-
-
-class AuthenticatedClientMockWithNoBalance(AuthenticatedClientMock):
-    # noinspection PyMethodMayBeStatic
-    def get_accounts(self):
-        return [
-            {
-                'currency': 'BTC',
-                'available': "0",
-            },
-            {
-                'currency': 'USD',
-                'available': "0",
-            },
-            {
-                'currency': 'ETC',
-                'available': "0",
-            },
-        ]
 
 
 class TestTrader(unittest.TestCase):
@@ -148,15 +35,29 @@ class TestTrader(unittest.TestCase):
         self.assertRaises(ProductDefinitionFailure, Trader, AuthenticatedClientMock(), 'ETH-EUR')
 
     def test_good_order(self):
-        trader = Trader(AuthenticatedClientMockWithOrders(), 'BTC-USD')
+        client_with_orders = AuthenticatedClientMock()
+        client_with_orders.get_orders = MagicMock(return_value=[[
+            {
+                'id': 'test_id',
+                'side': 'buy',
+                'size': '100',
+                'price': '100',
+            }
+        ]])
+        trader = Trader(client_with_orders, 'BTC-USD')
         trader.buy_limit_ptc(10, 100)
         self.assertTrue(len(trader.orders) == 2)
+        self.assertTrue(trader.available_balance['USD'] == 99000.001)
         trader.buy_limit_ptc(10, 200)
         self.assertTrue(len(trader.orders) == 3)
+        self.assertTrue(trader.available_balance['USD'] == 97000.001)
         trader.sell_limit_ptc(10, 200)
         self.assertTrue(len(trader.orders) == 4)
+        self.assertTrue(trader.available_balance['USD'] == 97000.001)
+        self.assertTrue(trader.available_balance['BTC'] == 99990.001)
         trader.buy_stop(10, 100)
         self.assertTrue(len(trader.orders) == 5)
+        self.assertTrue(trader.available_balance['USD'] == 96000.001)
 
     def test_bad_order(self):
         trader = Trader(AuthenticatedClientMock(), 'ETH-USD')
@@ -165,25 +66,81 @@ class TestTrader(unittest.TestCase):
         self.assertRaises(OrderPlacementFailure, trader.sell_limit_ptc, 20000, 10)
         self.assertRaises(OrderPlacementFailure, trader.sell_limit_ptc, 0.001, 10)
 
+    def test_decaying_order(self):
+        client_with_order_failure = AuthenticatedClientMock()
+        # Two failures then a success
+        client_with_order_failure.buy = Mock(side_effect=[
+            {
+                'message': 'test1',
+            },
+            {
+                'message': 'test2',
+            },
+            {
+                'id': 'id1',
+            },
+        ])
+        trader = Trader(client_with_order_failure, 'BTC-USD')
+        trader.buy_limit_ptc(10, 100)
+        self.assertTrue(len(trader.orders) == 1)
+        self.assertTrue(trader.available_balance['USD'] == 99010.001)
+        self.assertTrue(trader.available_balance['BTC'] == 100000.001)
+        client_with_order_failure.buy.assert_any_call(
+            type='limit',
+            product_id='BTC-USD',
+            price=100.0,
+            size=10,
+            post_only=True,
+        )
+        client_with_order_failure.buy.assert_any_call(
+            type='limit',
+            product_id='BTC-USD',
+            price=99.5,
+            size=10,
+            post_only=True,
+        )
+        client_with_order_failure.buy.assert_any_call(
+            type='limit',
+            product_id='BTC-USD',
+            price=99.0,
+            size=10,
+            post_only=True,
+        )
+
     def test_insufficient_funds(self):
-        trader = Trader(AuthenticatedClientMockWithNoBalance(), 'BTC-USD')
+        client_no_balance = AuthenticatedClientMock()
+        client_no_balance.get_accounts = MagicMock(return_value=[
+            {
+                'currency': 'BTC',
+                'available': "0",
+            },
+            {
+                'currency': 'USD',
+                'available': "0",
+            },
+            {
+                'currency': 'ETC',
+                'available': "0",
+            },
+        ])
+        trader = Trader(client_no_balance, 'BTC-USD')
         self.assertRaises(AccountBalanceFailure, trader.buy_limit_ptc, 50, 10)
         self.assertRaises(AccountBalanceFailure, trader.sell_limit_ptc, 50, 10)
 
     def test_seed_wallet(self):
         trader = Trader(AuthenticatedClientMock(), 'BTC-USD')
-        trader.seed_wallet(20)
+        trader.seed_wallet(2000)
         expected = [
             {
                 'side': 'buy',
-                'size': '20',
+                'size': '20.0',
                 'price': '101.0',
                 'type': 'stop',
                 'post_only': False,
             },
             {
                 'side': 'buy',
-                'size': '20',
+                'size': '20.0',
                 'price': '99.0',
                 'type': 'limit',
                 'post_only': True,

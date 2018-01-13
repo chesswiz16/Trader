@@ -110,7 +110,7 @@ class Trader(object):
                 self.product_id, self.quote_increment, len(self.orders),
                 json.dumps(self.orders, indent=4, sort_keys=True)))
 
-    def seed_wallet(self, size):
+    def seed_wallet(self, quote_ccy_size):
         """At the start of the day or when the wallet is empty, need something to trade
         Place a stop buy at 1% above current market and a limit post buy at 1% below to minimize fees
         """
@@ -120,6 +120,7 @@ class Trader(object):
             raise OrderPlacementFailure(
                 'Unable to get market quote, api message: {}'.format(ticker.get('message', 'unknown error')))
         current_price = float(ticker['price'])
+        size = self.to_size_increment(quote_ccy_size / current_price)
         delta = current_price * 0.01
         module_logger.info(
             'Seeding wallet: {} {} @ {}/{}'.format(size, self.product_id, current_price + delta, current_price - delta))
@@ -142,7 +143,7 @@ class Trader(object):
             raise OrderPlacementFailure('Side {} not expected, what are you doing?'.format(side))
 
         for i in range(retries):
-            price = self.to_increment(price + (price * direction * i * spread))
+            price = self.to_price_increment(price + (price * direction * i * spread))
             if side is 'buy':
                 if balance < size * price:
                     module_logger.exception(
@@ -163,6 +164,8 @@ class Trader(object):
                         product_id=self.product_id,
                         price=price,
                         size=size,
+                        # If not specified, will hold entire account balance!
+                        funds=self.to_size_increment(size * price, self.quote_currency)
                     )
                 else:
                     raise OrderPlacementFailure('{} of type {} not supported'.format(side, order_type))
@@ -190,6 +193,11 @@ class Trader(object):
                 self.orders[result['id']] = result
                 module_logger.info(
                     'Placed {} {} order for {} {} @ {}'.format(side, order_type, size, self.product_id, price))
+                # Update account balances
+                if side is 'buy':
+                    self.available_balance[self.quote_currency] -= size * price
+                else:
+                    self.available_balance[self.base_currency] -= size
                 return
         # Failed on decaying price, raise an exception
         message = 'Error placing {} order of type {}. Retried {} times, giving up'.format(side, order_type, retries)
@@ -204,6 +212,16 @@ class Trader(object):
 
     def sell_limit_ptc(self, size, price, retries=3, spread=0.003):
         self.place_decaying_order('sell', 'limit', size, price, retries=retries, spread=spread)
+
+    def cancel_all(self):
+        """BAIL!!!
+        """
+        for order_id in self.orders:
+            result = self.client.cancel_order(order_id)
+            module_logger.info(
+                'Canceling {}, result: {}'.format(order_id, json.dumps(result, indent=4, sort_keys=True)))
+        # Call cancel all for good measure (don't think it actually works)
+        self.client.cancel_all()
 
     def on_order_done(self, message):
         """Action to take on order fill/cancel. Base implementation simply updates the order cache and currency balances.
@@ -305,7 +323,7 @@ class Trader(object):
     def get_balance(self, currency):
         return self.available_balance.get(currency, 0.0)
 
-    def to_increment(self, price):
+    def to_price_increment(self, price):
         """Round to nearest price increment.
         https://docs.gdax.com/#get-products
         Otherwise order will be rejected.
@@ -313,6 +331,18 @@ class Trader(object):
         diff = price - round(price)
         increments = round(diff / self.quote_increment)
         return round(price) + (increments * self.quote_increment)
+
+    def to_size_increment(self, size_base_ccy, base_currency=''):
+        """1 satoshi or wei
+        """
+        if base_currency == '':
+            base_currency = self.base_currency
+        if base_currency == 'BTC':
+            return round(size_base_ccy, 8)
+        elif base_currency == 'ETH':
+            return round(size_base_ccy, 18)
+        else:
+            return round(size_base_ccy, 2)
 
 
 class OrderFillFailure(Exception):
@@ -354,10 +384,10 @@ if __name__ == '__main__':
         data = json.load(config)
 
     auth_client = AuthenticatedClient(
-        data["auth"]["key"],
-        data["auth"]["secret"],
-        data["auth"]["phrase"],
-        api_url=data["endpoints"]["rest"],
+        data['auth']['key'],
+        data['auth']['secret'],
+        data['auth']['phrase'],
+        api_url=data['endpoints']['rest'],
     )
     res = auth_client.get_accounts()
     print(json.dumps(res, indent=4, sort_keys=True))
