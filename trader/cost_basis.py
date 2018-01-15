@@ -9,17 +9,27 @@ module_logger = logging.getLogger(__name__)
 
 
 class CostBasis(Trader):
-    def __init__(self, client, product_id, order_depth, wallet_fraction):
+    def __init__(self, product_id, order_depth, wallet_fraction, auth_client=None, api_key='', secret_key='',
+                 pass_phrase='', api_url='', ws_url=''):
+
         """CostBasis trader. Places a sell at +1% of current cost basis for entire base currency balance
         and a buy which if filled would move current cost basis by -1%.
-        :param client: AuthenticatedClient which has been initialized to be able to query wallet balance
+        :param auth_client: AuthenticatedClient which has been initialized to be able to query wallet balance
         and place orders.
         :param product_id: ETH-USD, BTC-USD, etc.
         :param order_depth: Number of sequential buy orders algo is allowed to execute.
         :param wallet_fraction: Percentage of quote currency (USD) wallet balance algo is allowed to
         use per order. This is intentionally decaying as more buy orders are placed.
         """
-        Trader.__init__(self, client, product_id)
+        Trader.__init__(self,
+                        product_id,
+                        auth_client=auth_client,
+                        api_key=api_key,
+                        secret_key=secret_key,
+                        pass_phrase=pass_phrase,
+                        api_url=api_url,
+                        ws_url=ws_url,
+                        )
         self.max_order_depth = order_depth
         self.wallet_fraction = wallet_fraction
 
@@ -40,19 +50,19 @@ class CostBasis(Trader):
 
 
 if __name__ == '__main__':
-    from gdax.authenticated_client import AuthenticatedClient
-
     logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
     with open('../config/sandbox.json') as config:
         data = json.load(config)
 
-    auth_client = AuthenticatedClient(
-        data['auth']['key'],
-        data['auth']['secret'],
-        data['auth']['phrase'],
+    trader = CostBasis(
+        'BTC-USD',
+        data['cost_basis']['order_depth'],
+        data['cost_basis']['wallet_fraction'],
+        api_key=data['auth']['key'],
+        secret_key=data['auth']['secret'],
+        pass_phrase=data['auth']['phrase'],
         api_url=data['endpoints']['rest'],
+        ws_url=data['endpoints']['socket'],
     )
-
-    trader = CostBasis(auth_client, 'BTC-USD', data['cost_basis']['order_depth'], data['cost_basis']['wallet_fraction'])
     trader.on_start()

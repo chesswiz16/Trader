@@ -1,13 +1,26 @@
+import base64
+import hashlib
+import hmac
 import json
 import logging
+import time
+
+from gdax.authenticated_client import AuthenticatedClient
+from ws4py.client.threadedclient import WebSocketClient
 
 module_logger = logging.getLogger(__name__)
 
 
-class Trader(object):
-    def __init__(self, client, product_id):
-        self.client = client
+class Trader(WebSocketClient):
+    def __init__(self, product_id, auth_client=None, api_key='', secret_key='', pass_phrase='', api_url='', ws_url=''):
         self.product_id = product_id
+        self.api_key = api_key
+        self.secret_key = secret_key
+        self.pass_phrase = pass_phrase
+        if auth_client is None:
+            self.client = AuthenticatedClient(api_key, secret_key, pass_phrase, api_url=api_url)
+        else:
+            self.client = auth_client
 
         # Query for product and find status/increment
         products = self.client.get_products()
@@ -29,6 +42,41 @@ class Trader(object):
 
         # Query for current open orders
         self.reset_open_orders()
+        if ws_url != '':
+            WebSocketClient.__init__(self, ws_url)
+
+    def opened(self):
+        """Called when the websocket handshake has been established, sends
+        the initial subscribe message to gdax.
+        """
+        timestamp = str(time.time())
+        message = timestamp + 'GET' + '/users/self/verify'
+        message = message.encode('ascii')
+        hmac_key = base64.b64decode(self.secret_key)
+        signature = hmac.new(hmac_key, message, hashlib.sha256)
+        signature_b64 = base64.b64encode(signature.digest())
+        params = {
+            'type': 'subscribe',
+            'product_ids': [
+                self.product_id,
+            ],
+            'signature': signature_b64.decode('utf-8'),
+            'key': self.api_key,
+            'passphrase': self.pass_phrase,
+            'timestamp': timestamp,
+            'channels': [
+                'heartbeat',
+                'user'
+            ],
+        }
+        self.send(json.dumps(params))
+
+    def received_message(self, message):
+        module_logger.info('Message from websocket:{}'.format(message))
+        # TODO: Intend to trigger on_order_done here but sandbox websocket is currently down
+
+    def closed(self, code, reason=None):
+        module_logger.info('Closed down. Code: {} Reason: {}'.format(code, reason))
 
     def reset_account_balances(self):
         """Query rest endpoint for available account balance
@@ -378,22 +426,22 @@ class ProductDefinitionFailure(Exception):
 
 
 if __name__ == '__main__':
-    from gdax.authenticated_client import AuthenticatedClient
+    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
-    with open('../config/sandbox.json') as config:
+    # with open('../config/sandbox.json') as config:
+    with open('../config/prod.json') as config:
         data = json.load(config)
 
-    auth_client = AuthenticatedClient(
-        data['auth']['key'],
-        data['auth']['secret'],
-        data['auth']['phrase'],
+    t = Trader(
+        'BTC-USD',
+        api_key=data['auth']['key'],
+        secret_key=data['auth']['secret'],
+        pass_phrase=data['auth']['phrase'],
         api_url=data['endpoints']['rest'],
+        ws_url=data['endpoints']['socket']
     )
-    res = auth_client.get_accounts()
-    print(json.dumps(res, indent=4, sort_keys=True))
-    res = auth_client.get_products()
-    print(json.dumps(res, indent=4, sort_keys=True))
-    res = auth_client.get_product_ticker('BTC-USD')
-    print(json.dumps(res, indent=4, sort_keys=True))
-    # res = auth_client.get_product_trades('BTC-USD')
-    # print(json.dumps(res, indent=4, sort_keys=True))
+    try:
+        t.connect()
+        t.run_forever()
+    except KeyboardInterrupt:
+        t.close()

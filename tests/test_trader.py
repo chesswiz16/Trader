@@ -10,7 +10,7 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 class TestTrader(unittest.TestCase):
     def test_increment(self):
-        btc_trader = Trader(AuthenticatedClientMock(), 'BTC-USD')
+        btc_trader = Trader('BTC-USD', auth_client=AuthenticatedClientMock())
         btc_trader.buy_limit_ptc(50, 100.3)
         expected = {
             'side': 'buy',
@@ -20,7 +20,7 @@ class TestTrader(unittest.TestCase):
             'post_only': True,
         }
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in btc_trader.orders.values()])
-        eth_trader = Trader(AuthenticatedClientMock(), 'ETH-USD')
+        eth_trader = Trader('ETH-USD', auth_client=AuthenticatedClientMock())
         eth_trader.buy_limit_ptc(50, 100.03)
         expected = {
             'side': 'buy',
@@ -32,7 +32,7 @@ class TestTrader(unittest.TestCase):
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in eth_trader.orders.values()])
 
     def test_bad_product(self):
-        self.assertRaises(ProductDefinitionFailure, Trader, AuthenticatedClientMock(), 'ETH-EUR')
+        self.assertRaises(ProductDefinitionFailure, Trader, 'ETH-EUR', auth_client=AuthenticatedClientMock())
 
     def test_good_order(self):
         client_with_orders = AuthenticatedClientMock()
@@ -44,7 +44,7 @@ class TestTrader(unittest.TestCase):
                 'price': '100',
             }
         ]])
-        trader = Trader(client_with_orders, 'BTC-USD')
+        trader = Trader('BTC-USD', auth_client=client_with_orders)
         trader.buy_limit_ptc(10, 100)
         self.assertTrue(len(trader.orders) == 2)
         self.assertTrue(trader.available_balance['USD'] == 99000.001)
@@ -60,7 +60,7 @@ class TestTrader(unittest.TestCase):
         self.assertTrue(trader.available_balance['USD'] == 96000.001)
 
     def test_bad_order(self):
-        trader = Trader(AuthenticatedClientMock(), 'ETH-USD')
+        trader = Trader('ETH-USD', auth_client=AuthenticatedClientMock())
         self.assertRaises(OrderPlacementFailure, trader.buy_limit_ptc, 200, 10)
         self.assertRaises(OrderPlacementFailure, trader.sell_limit_ptc, 200, 10)
         self.assertRaises(OrderPlacementFailure, trader.sell_limit_ptc, 20000, 10)
@@ -80,7 +80,7 @@ class TestTrader(unittest.TestCase):
                 'id': 'id1',
             },
         ])
-        trader = Trader(client_with_order_failure, 'BTC-USD')
+        trader = Trader('BTC-USD', auth_client=client_with_order_failure)
         trader.buy_limit_ptc(10, 100)
         self.assertTrue(len(trader.orders) == 1)
         self.assertTrue(trader.available_balance['USD'] == 99010.001)
@@ -123,12 +123,12 @@ class TestTrader(unittest.TestCase):
                 'available': "0",
             },
         ])
-        trader = Trader(client_no_balance, 'BTC-USD')
+        trader = Trader('BTC-USD', auth_client=client_no_balance)
         self.assertRaises(AccountBalanceFailure, trader.buy_limit_ptc, 50, 10)
         self.assertRaises(AccountBalanceFailure, trader.sell_limit_ptc, 50, 10)
 
     def test_seed_wallet(self):
-        trader = Trader(AuthenticatedClientMock(), 'BTC-USD')
+        trader = Trader('BTC-USD', auth_client=AuthenticatedClientMock())
         trader.seed_wallet(2000)
         expected = [
             {
@@ -150,7 +150,7 @@ class TestTrader(unittest.TestCase):
             self.assertIn(order, [{k: x[k] for k in order.keys()} for x in trader.orders.values()])
 
     def test_order_fill(self):
-        trader = Trader(AuthenticatedClientMock(), 'BTC-USD')
+        trader = Trader('BTC-USD', auth_client=AuthenticatedClientMock())
         trader.orders = {
             'id1': {
                 'side': 'buy',
@@ -213,7 +213,7 @@ class TestTrader(unittest.TestCase):
         self.assertEqual(trader.available_balance['BTC'], 15)
 
     def test_order_fill_failure(self):
-        trader = Trader(AuthenticatedClientMock(), 'BTC-USD')
+        trader = Trader('BTC-USD', auth_client=AuthenticatedClientMock())
         trader.orders = {
             'id3': {
                 'side': 'sell',
@@ -240,7 +240,7 @@ class TestTrader(unittest.TestCase):
         })
 
         # Order id correct but type is wrong
-        trader = Trader(AuthenticatedClientMock(), 'BTC-USD')
+        trader = Trader('BTC-USD', auth_client=AuthenticatedClientMock())
         trader.orders = {
             'id3': {
                 'side': 'sell',
