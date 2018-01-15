@@ -72,8 +72,11 @@ class Trader(WebSocketClient):
         self.send(json.dumps(params))
 
     def received_message(self, message):
-        module_logger.info('Message from websocket:{}'.format(message))
-        # TODO: Intend to trigger on_order_done here but sandbox websocket is currently down
+        module_logger.debug('Message from websocket:{}'.format(message))
+        message_type = message.get('type', '')
+        # Order fill message
+        if message_type == 'done':
+            self.on_order_done(message)
 
     def closed(self, code, reason=None):
         module_logger.info('Closed down. Code: {} Reason: {}'.format(code, reason))
@@ -270,6 +273,7 @@ class Trader(WebSocketClient):
                 'Canceling {}, result: {}'.format(order_id, json.dumps(result, indent=4, sort_keys=True)))
         # Call cancel all for good measure (don't think it actually works)
         self.client.cancel_all()
+        self.orders = {}
 
     def on_order_done(self, message):
         """Action to take on order fill/cancel. Base implementation simply updates the order cache and currency balances.
@@ -315,6 +319,7 @@ class Trader(WebSocketClient):
             # Update account/order status
             if checked_order_message['reason'] == 'canceled':
                 self.orders.pop(order_id)
+                module_logger.info('Order {} cancelled'.format(order_id))
                 return {}
             elif checked_order_message['reason'] == 'filled':
                 # Check fill price and remaining size
@@ -323,6 +328,7 @@ class Trader(WebSocketClient):
                 remaining = float(checked_order_message['remaining_size'])
                 original = float(self.orders[order_id]['size'])
                 filled = original - remaining
+                checked_order_message['size'] = filled
                 module_logger.info('Order {} filled for {} {} {} @ {}, remaining {}'.format(
                     order_id, side, original, self.base_currency, price, remaining))
                 if remaining == 0:
@@ -426,7 +432,7 @@ class ProductDefinitionFailure(Exception):
 
 
 if __name__ == '__main__':
-    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
     # with open('../config/sandbox.json') as config:
     with open('../config/prod.json') as config:
