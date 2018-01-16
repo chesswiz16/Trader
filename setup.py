@@ -3,10 +3,9 @@
 from setuptools import setup, find_packages
 
 install_requires = [
-    'bintrees==2.0.7',
-    'requests==2.13.0',
-    'six==1.10.0',
-    'websocket-client==0.40.0',
+    'ws4py==0.4.3'
+    'gdax==1.0.6'
+    'python-dateutil==2.6.1'
 ]
 
 tests_require = [

@@ -9,7 +9,7 @@ from trader.base_trader import Trader
 module_logger = logging.getLogger(__name__)
 
 
-class CostBasis(Trader):
+class CostBasisTrader(Trader):
     def __init__(self, product_id, order_depth, wallet_fraction, auth_client=None, api_key='', secret_key='',
                  pass_phrase='', api_url='', ws_url=''):
 
@@ -158,7 +158,7 @@ if __name__ == '__main__':
     with open('../config/sandbox.json') as config:
         data = json.load(config)
 
-    trader = CostBasis(
+    trader = CostBasisTrader(
         'BTC-USD',
         data['cost_basis']['order_depth'],
         data['cost_basis']['wallet_fraction'],

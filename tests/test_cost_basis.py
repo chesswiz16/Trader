@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import Mock, MagicMock
 
 from tests.authenticated_client_mock import AuthenticatedClientMock
-from trader.cost_basis import CostBasis
+from trader.cost_basis import CostBasisTrader
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
@@ -16,7 +16,7 @@ class TestCostBasis(unittest.TestCase):
         auth_client_mock.get_product_ticker = MagicMock(return_value={
             'price': '100',
         })
-        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        trader = CostBasisTrader('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
         trader.available_balance = {
             'ETH': 0.0,
             'USD': 10000,
@@ -240,7 +240,7 @@ class TestCostBasis(unittest.TestCase):
         auth_client_mock.get_product_ticker = MagicMock(return_value={
             'price': '100',
         })
-        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        trader = CostBasisTrader('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
         trader.on_start()
         self.assertTrue(len(trader.orders), 2)
         self.assertEqual(trader.base_currency_bought, 0.0)
@@ -248,7 +248,7 @@ class TestCostBasis(unittest.TestCase):
         self.assertEqual(trader.current_order_depth, 0)
 
         # Has seeding orders, assert orders are the same
-        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        trader = CostBasisTrader('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
         orders = {
             'id1': {
                 'side': 'buy',
@@ -274,7 +274,7 @@ class TestCostBasis(unittest.TestCase):
         self.assertEqual(trader.orders, orders)
 
         # Has limit buy and sell, pick up where we were
-        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        trader = CostBasisTrader('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
         orders = {
             'id1': {
                 'side': 'sell',
@@ -300,7 +300,7 @@ class TestCostBasis(unittest.TestCase):
         self.assertEqual(trader.orders, orders)
 
         # Has limit sell, pick up where we were
-        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        trader = CostBasisTrader('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
         orders = {
             'id1': {
                 'side': 'sell',
@@ -319,7 +319,7 @@ class TestCostBasis(unittest.TestCase):
         self.assertEqual(trader.orders, orders)
 
         # Only has buy, reset
-        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        trader = CostBasisTrader('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
         orders = {
             'id2': {
                 'side': 'buy',
@@ -337,7 +337,7 @@ class TestCostBasis(unittest.TestCase):
         self.assertEqual(trader.current_order_depth, 0)
 
         # Weird order state, resets status
-        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        trader = CostBasisTrader('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
         orders = {
             'id1': {
                 'side': 'sell',

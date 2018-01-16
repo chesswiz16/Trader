@@ -9,7 +9,7 @@
     "socket": "wss://ws-feed-public.sandbox.gdax.com"
   },
   "cost_basis": {
-    "order_depth": 4,
-    "wallet_fraction": 0.08
+    "order_depth": 6,
+    "wallet_fraction": 0.13
   }
 }

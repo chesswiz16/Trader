@@ -66,15 +66,15 @@ class AuthenticatedClientMock(object):
         return [
             {
                 'currency': 'BTC',
-                'available': "100000.001",
+                'available': '100000.001',
             },
             {
                 'currency': 'USD',
-                'available': "100000.001",
+                'available': '100000.001',
             },
             {
                 'currency': 'ETH',
-                'available': "100000.001",
+                'available': '100000.001',
             },
         ]
 
