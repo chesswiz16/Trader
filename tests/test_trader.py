@@ -187,7 +187,7 @@ class TestTrader(unittest.TestCase):
             'remaining_size': '5',
         })
         self.assertEqual(trader.orders['id1']['size'], '20')
-        self.assertEqual(trader.orders['id1']['remaining_size'], 5)
+        self.assertEqual(trader.orders['id1']['filled_size'], 15)
         self.assertEqual(trader.available_balance['USD'], 20 * 105)
         self.assertEqual(trader.available_balance['BTC'], 25)
         trader.on_order_fill({

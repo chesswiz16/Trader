@@ -120,7 +120,8 @@ class TestCostBasis(unittest.TestCase):
         self.assertEqual(trader.current_order_depth, 2)
         self.assertEqual(trader.quote_currency_paid, 1890.9554739312316)
         self.assertEqual(trader.base_currency_bought, 19.2939495969799)
-        self.assertEqual(trader.orders[buy_order['id']]['remaining_size'], 1)
+        self.assertEqual(
+            float(trader.orders[buy_order['id']]['size']) - float(trader.orders[buy_order['id']]['filled_size']), 1)
         trader.on_order_fill({
             'order_id': buy_order['id'],
             'type': 'done',
@@ -202,7 +203,7 @@ class TestCostBasis(unittest.TestCase):
         self.assertEqual(len(trader.orders), 2)
         expected = {
             'side': 'buy',
-            'size': '10.03',
+            'size': '10.034346853569728',
             'price': '101.0',
             'type': 'stop',
             'post_only': False,
@@ -210,7 +211,7 @@ class TestCostBasis(unittest.TestCase):
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in trader.orders.values()])
         expected = {
             'side': 'buy',
-            'size': '10.03',
+            'size': '10.034346853569728',
             'price': '99.0',
             'type': 'limit',
             'post_only': True,
@@ -221,3 +222,147 @@ class TestCostBasis(unittest.TestCase):
             wallet_value += float(order['size']) * float(order['price'])
         # Make sure we actually made money...
         self.assertGreater(wallet_value, 10000)
+
+    def test_recovery(self):
+        auth_client_mock = AuthenticatedClientMock()
+        auth_client_mock.get_accounts = MagicMock(return_value=[
+            {
+                'currency': 'ETH',
+                'available': '0',
+            },
+            {
+                'currency': 'USD',
+                'available': '10000',
+            },
+        ])
+        auth_client_mock.cancel_order = MagicMock(return_value={})
+        auth_client_mock.cancel_all = Mock()
+        auth_client_mock.get_product_ticker = MagicMock(return_value={
+            'price': '100',
+        })
+        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        trader.on_start()
+        self.assertTrue(len(trader.orders), 2)
+        self.assertEqual(trader.base_currency_bought, 0.0)
+        self.assertEqual(trader.quote_currency_paid, 0.0)
+        self.assertEqual(trader.current_order_depth, 0)
+
+        # Has seeding orders, assert orders are the same
+        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        orders = {
+            'id1': {
+                'side': 'buy',
+                'size': '20',
+                'price': '101.0',
+                'type': 'stop',
+                'post_only': False,
+            },
+            'id2': {
+                'side': 'buy',
+                'size': '20',
+                'price': '99.0',
+                'type': 'limit',
+                'post_only': True,
+            },
+        }
+        trader.orders = orders
+        trader.on_start()
+        self.assertTrue(len(trader.orders), 2)
+        self.assertEqual(trader.base_currency_bought, 0.0)
+        self.assertEqual(trader.quote_currency_paid, 0.0)
+        self.assertEqual(trader.current_order_depth, 0)
+        self.assertEqual(trader.orders, orders)
+
+        # Has limit buy and sell, pick up where we were
+        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        orders = {
+            'id1': {
+                'side': 'sell',
+                'size': '20',
+                'price': '101.0',
+                'type': 'limit',
+                'post_only': True,
+            },
+            'id2': {
+                'side': 'buy',
+                'size': '20',
+                'price': '99.0',
+                'type': 'limit',
+                'post_only': True,
+            },
+        }
+        trader.orders = orders
+        trader.on_start()
+        self.assertTrue(len(trader.orders), 2)
+        self.assertEqual(trader.base_currency_bought, 20)
+        self.assertEqual(trader.quote_currency_paid, 20 * 100)
+        self.assertEqual(trader.current_order_depth, 2)
+        self.assertEqual(trader.orders, orders)
+
+        # Has limit sell, pick up where we were
+        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        orders = {
+            'id1': {
+                'side': 'sell',
+                'size': '20',
+                'price': '101.0',
+                'type': 'limit',
+                'post_only': True,
+            },
+        }
+        trader.orders = orders
+        trader.on_start()
+        self.assertTrue(len(trader.orders), 2)
+        self.assertEqual(trader.base_currency_bought, 20)
+        self.assertEqual(trader.quote_currency_paid, 20 * 100)
+        self.assertEqual(trader.current_order_depth, 2)
+        self.assertEqual(trader.orders, orders)
+
+        # Only has buy, reset
+        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        orders = {
+            'id2': {
+                'side': 'buy',
+                'size': '20',
+                'price': '99.0',
+                'type': 'limit',
+                'post_only': True,
+            },
+        }
+        trader.orders = orders
+        trader.on_start()
+        self.assertTrue(len(trader.orders), 2)
+        self.assertEqual(trader.base_currency_bought, 0.0)
+        self.assertEqual(trader.quote_currency_paid, 0.0)
+        self.assertEqual(trader.current_order_depth, 0)
+
+        # Weird order state, resets status
+        trader = CostBasis('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
+        orders = {
+            'id1': {
+                'side': 'sell',
+                'size': '20',
+                'price': '101.0',
+                'type': 'limit',
+                'post_only': True,
+            },
+            'id2': {
+                'side': 'buy',
+                'size': '20',
+                'price': '99.0',
+                'type': 'limit',
+                'post_only': True,
+            },
+            'id3': {
+                'side': 'buy',
+                'size': '20',
+                'price': '99.0',
+                'type': 'limit',
+                'post_only': True,
+            },
+        }
+        trader.orders = orders
+        self.assertTrue(len(trader.orders), 2)
+        self.assertEqual(trader.base_currency_bought, 0.0)
+        self.assertEqual(trader.quote_currency_paid, 0.0)
+        self.assertEqual(trader.current_order_depth, 0)

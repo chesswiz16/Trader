@@ -34,6 +34,7 @@ class Trader(WebSocketClient):
         self.quote_increment = float(product[0]['quote_increment'])
         self.base_min_size = float(product[0]['base_min_size'])
         self.base_max_size = float(product[0]['base_max_size'])
+        # Available funds for placing orders, updated on order placements and cancels
         self.available_balance = {}
         self.orders = {}
 
@@ -338,13 +339,14 @@ class Trader(WebSocketClient):
                 remaining = float(checked_order_message['remaining_size'])
                 original = float(self.orders[order_id]['size'])
                 filled = original - remaining
-                checked_order_message['size'] = filled
+                checked_order_message['size'] = original
+                checked_order_message['filled_size'] = filled
                 module_logger.info('Order {} filled for {} {} {} @ {}, remaining {}'.format(
                     order_id, side, original, self.base_currency, price, remaining))
                 if remaining == 0:
                     self.orders.pop(order_id)
                 else:
-                    self.orders[order_id]['remaining_size'] = remaining
+                    self.orders[order_id]['filled_size'] = filled
 
                 if side == 'buy':
                     if self.base_currency not in self.available_balance:

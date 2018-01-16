@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 
 from trader.base_trader import AccountBalanceFailure
 from trader.base_trader import OrderPlacementFailure
@@ -32,9 +33,8 @@ class CostBasis(Trader):
                         )
         self.max_order_depth = order_depth
         self.wallet_fraction = wallet_fraction
-
-        # TODO: Need to figure out how to recover on unexpected error
         self.current_order_depth = 0
+        # Running total of how much we've bought and how much we've paid for it, updated on order fills
         self.quote_currency_paid = 0.0
         self.base_currency_bought = 0.0
 
@@ -44,14 +44,60 @@ class CostBasis(Trader):
         self.current_order_depth = 0
         self.quote_currency_paid = 0.0
         self.base_currency_bought = 0.0
-        if len(self.orders) == 0:
-            try:
+        try:
+            stop_orders = [x for x in self.orders.values() if x.get('type', '') == 'stop']
+            limit_orders = [x for x in self.orders.values() if x.get('type', '') == 'limit']
+            if len(self.orders) == 0:
                 Trader.seed_wallet(self, self.wallet_fraction * self.get_balance(self.quote_currency))
-            except (OrderPlacementFailure, AccountBalanceFailure) as e:
-                module_logger.warning('Failed to seed wallet, canceling all open orders')
-                self.cancel_all()
-                raise e
-        # TODO: Need to figure out how to recover on unexpected error
+            # With two open orders, we either failed right after seeding or in the middle of the algo
+            elif len(self.orders) == 2:
+                if len(stop_orders) == 1 and len(limit_orders) == 1:
+                    module_logger.info('Recovered with seeding orders')
+                elif len(limit_orders) == 2:
+                    # Work out what cost basis was from the sell (current sell was 1% above cost basis)
+                    sell_orders = [x for x in limit_orders if x.get('side', '') == 'sell']
+                    self.reset_from_sell(sell_orders)
+                else:
+                    raise AlgoStateException('Unexpected order state:{}'.format(self.orders))
+            elif len(self.orders) == 1:
+                sell_orders = [x for x in limit_orders if x.get('side', '') == 'sell']
+                buy_orders = [x for x in limit_orders if x.get('side', '') == 'buy']
+                if len(sell_orders) == 1:
+                    self.reset_from_sell(sell_orders)
+                elif len(buy_orders) == 1:
+                    # If we only have the buy, cancel it and reseed
+                    module_logger.info('Found one open buy order, canceling and reseeding')
+                    self.cancel_all()
+                    Trader.seed_wallet(self, self.wallet_fraction * self.get_balance(self.quote_currency))
+                else:
+                    raise AlgoStateException('Unexpected order state:{}'.format(self.orders))
+            else:
+                raise AlgoStateException('Unexpected order state:{}'.format(self.orders))
+        except (OrderPlacementFailure, AccountBalanceFailure) as e:
+            module_logger.error('BAILING. Failed to seed wallet, canceling all open orders')
+            self.cancel_all()
+            raise e
+        except AlgoStateException:
+            module_logger.warning('Unexpected order state: {}, canceling all and seeding'.format(
+                json.dumps(self.orders, indent=4, sort_keys=True)))
+            self.cancel_all()
+            Trader.seed_wallet(self, self.wallet_fraction * self.get_balance(self.quote_currency))
+
+    def reset_from_sell(self, sell_order):
+        if len(sell_order) != 1:
+            raise AlgoStateException(
+                'Unexpected order state:{}'.format(json.dumps(self.orders, indent=4, sort_keys=True)))
+        sell_order = sell_order[0]
+        cost_basis = float(sell_order['price']) / 1.01
+        self.base_currency_bought = float(sell_order['size'])
+        self.quote_currency_paid = self.base_currency_bought * cost_basis
+        # Guess at the order depth. If my math was better I'm sure we could be more accurate
+        self.current_order_depth = math.floor(
+            self.quote_currency_paid / (self.available_balance[self.quote_currency] * self.wallet_fraction))
+        module_logger.info(
+            'Recovered with cost basis: {} ccy bought: {} price paid: {} order depth: {}'.format(
+                cost_basis, self.base_currency_bought, self.quote_currency_paid, self.current_order_depth
+            ))
 
     def on_order_fill(self, message):
         """Actual meat of the logic. On order fill, determine where to place new orders
@@ -61,9 +107,9 @@ class CostBasis(Trader):
             side = checked_message['side']
             price = float(checked_message['price'])
             size = float(checked_message['size'])
-            remaining = float(checked_message['remaining_size'])
+            filled = float(checked_message['filled_size'])
             # Wait for partial order fills to be fully filled
-            if remaining <= 0.000001:
+            if size - filled <= 0.000000001:
                 # Full order fill, cancel other open orders
                 self.cancel_all()
                 if side == 'sell':

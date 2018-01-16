@@ -35,7 +35,7 @@ class AuthenticatedClientMock(object):
                 'status': 'online',
                 'id': 'ETH-USD',
                 'quote_increment': '0.01',
-                'base_currency': 'ETC',
+                'base_currency': 'ETH',
                 'quote_currency': 'USD',
                 'base_min_size': '0.01',
                 'base_max_size': '100000',
@@ -44,7 +44,7 @@ class AuthenticatedClientMock(object):
                 'status': 'offline',
                 'id': 'ETH-EUR',
                 'quote_increment': '0.1',
-                'base_currency': 'ETC',
+                'base_currency': 'ETH',
                 'quote_currency': 'EUR',
                 'base_min_size': '0.01',
                 'base_max_size': '100000',
@@ -73,7 +73,7 @@ class AuthenticatedClientMock(object):
                 'available': "100000.001",
             },
             {
-                'currency': 'ETC',
+                'currency': 'ETH',
                 'available': "100000.001",
             },
         ]
