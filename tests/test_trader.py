@@ -178,7 +178,7 @@ class TestTrader(unittest.TestCase):
             'USD': 20 * 105,
             'BTC': 10,
         }
-        trader.on_order_done({
+        trader.on_order_fill({
             'order_id': 'id1',
             'type': 'done',
             'price': '101.5',
@@ -186,10 +186,11 @@ class TestTrader(unittest.TestCase):
             'reason': 'filled',
             'remaining_size': '5',
         })
-        self.assertEqual(trader.orders['id1']['size'], 5)
-        self.assertEqual(trader.available_balance['USD'], 577.5)
+        self.assertEqual(trader.orders['id1']['size'], '20')
+        self.assertEqual(trader.orders['id1']['remaining_size'], 5)
+        self.assertEqual(trader.available_balance['USD'], 20 * 105)
         self.assertEqual(trader.available_balance['BTC'], 25)
-        trader.on_order_done({
+        trader.on_order_fill({
             'order_id': 'id2',
             'type': 'done',
             'price': '99',
@@ -198,9 +199,9 @@ class TestTrader(unittest.TestCase):
             'remaining_size': '0',
         })
         self.assertTrue('id2' not in trader.orders)
-        self.assertEqual(trader.available_balance['USD'], 577.5)
+        self.assertEqual(trader.available_balance['USD'], 20 * 105)
         self.assertEqual(trader.available_balance['BTC'], 25)
-        trader.on_order_done({
+        trader.on_order_fill({
             'order_id': 'id3',
             'type': 'done',
             'price': '90',
@@ -209,8 +210,8 @@ class TestTrader(unittest.TestCase):
             'remaining_size': '0',
         })
         self.assertTrue('id3' not in trader.orders)
-        self.assertEqual(trader.available_balance['USD'], 1477.5)
-        self.assertEqual(trader.available_balance['BTC'], 15)
+        self.assertEqual(trader.available_balance['USD'], 20 * 105 + 90 * 10)
+        self.assertEqual(trader.available_balance['BTC'], 25)
 
     def test_order_fill_failure(self):
         trader = Trader('BTC-USD', auth_client=AuthenticatedClientMock())
@@ -224,7 +225,7 @@ class TestTrader(unittest.TestCase):
             },
         }
         trader.available_balance = {}
-        self.assertRaises(OrderFillFailure, trader.on_order_done, {
+        self.assertRaises(OrderFillFailure, trader.on_order_fill, {
             'order_id': 'id1',
             'type': 'done',
             'price': '101.5',
@@ -233,8 +234,8 @@ class TestTrader(unittest.TestCase):
             'remaining_size': '5',
         })
         # Orders should be cleared out, balances goes back to start
-        self.assertEquals(trader.orders, {})
-        self.assertEquals(trader.available_balance, {
+        self.assertEqual(trader.orders, {})
+        self.assertEqual(trader.available_balance, {
             'BTC': 100000.001,
             'USD': 100000.001,
         })
@@ -251,7 +252,7 @@ class TestTrader(unittest.TestCase):
             },
         }
         trader.available_balance = {}
-        self.assertRaises(OrderFillFailure, trader.on_order_done, {
+        self.assertRaises(OrderFillFailure, trader.on_order_fill, {
             'order_id': 'id2',
             'price': '101.5',
             'side': 'buy',

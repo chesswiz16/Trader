@@ -53,10 +53,10 @@ class CostBasis(Trader):
                 raise e
         # TODO: Need to figure out how to recover on unexpected error
 
-    def on_order_done(self, message):
+    def on_order_fill(self, message):
         """Actual meat of the logic. On order fill, determine where to place new orders
         """
-        checked_message = Trader.on_order_done(self, message)
+        checked_message = Trader.on_order_fill(self, message)
         if checked_message:
             side = checked_message['side']
             price = float(checked_message['price'])
@@ -85,11 +85,11 @@ class CostBasis(Trader):
                             cost_basis * 0.99,
                         )
                     )
+                    # Place sell at 1% above current cost basis
+                    self.sell_limit_ptc(self.base_currency_bought, cost_basis * 1.01)
                     if self.current_order_depth > self.max_order_depth:
-                        module_logger.warning('At max order depth, not doing anything')
+                        module_logger.warning('At max order depth, not doing anything (leaving sell out)')
                     else:
-                        # Place sell at 1% above current cost basis
-                        self.sell_limit_ptc(self.base_currency_bought, cost_basis * 1.01)
                         # Place buy at price and size to move cost basis down by 1%
                         next_cost_basis = cost_basis * 0.99
                         next_quote_size = self.wallet_fraction * self.get_balance(self.quote_currency)

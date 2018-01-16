@@ -74,9 +74,10 @@ class Trader(WebSocketClient):
     def received_message(self, message):
         module_logger.debug('Message from websocket:{}'.format(message))
         message_type = message.get('type', '')
+        message_reason = message.get('reason', '')
         # Order fill message
-        if message_type == 'done':
-            self.on_order_done(message)
+        if message_type == 'done' and message_reason == 'filled':
+            self.on_order_fill(message)
 
     def closed(self, code, reason=None):
         module_logger.info('Closed down. Code: {} Reason: {}'.format(code, reason))
@@ -273,9 +274,16 @@ class Trader(WebSocketClient):
                 'Canceling {}, result: {}'.format(order_id, json.dumps(result, indent=4, sort_keys=True)))
         # Call cancel all for good measure (don't think it actually works)
         self.client.cancel_all()
+
+        # Add back order size to available balance
+        for order in self.orders.values():
+            if order['side'] == 'buy':
+                self.available_balance[self.quote_currency] += float(order['price']) * float(order['size'])
+            else:
+                self.available_balance[self.base_currency] += float(order['size'])
         self.orders = {}
 
-    def on_order_done(self, message):
+    def on_order_fill(self, message):
         """Action to take on order fill/cancel. Base implementation simply updates the order cache and currency balances.
         Assumes messages come from the "user" channel documented in
         https://docs.gdax.com/#the-code-classprettyprintfullcode-channel.
@@ -318,8 +326,10 @@ class Trader(WebSocketClient):
 
             # Update account/order status
             if checked_order_message['reason'] == 'canceled':
-                self.orders.pop(order_id)
-                module_logger.info('Order {} cancelled'.format(order_id))
+                # Shouldn't get here as we're filtering cancel message on the WS feed.
+                if order_id in self.orders:
+                    self.orders.pop(order_id)
+                module_logger.info('Order {} cancelled from exchange'.format(order_id))
                 return {}
             elif checked_order_message['reason'] == 'filled':
                 # Check fill price and remaining size
@@ -334,29 +344,14 @@ class Trader(WebSocketClient):
                 if remaining == 0:
                     self.orders.pop(order_id)
                 else:
-                    self.orders[order_id]['size'] = remaining
+                    self.orders[order_id]['remaining_size'] = remaining
 
                 if side == 'buy':
                     if self.base_currency not in self.available_balance:
                         self.available_balance[self.base_currency] = filled
                     else:
                         self.available_balance[self.base_currency] += filled
-                    # Must have had funds available to place order in the first place
-                    if self.quote_currency not in self.available_balance:
-                        raise OrderFillFailure(
-                            'No available balance in quote currency {} on buy, resetting order status'.format(
-                                self.quote_currency))
-                    else:
-                        self.available_balance[self.quote_currency] -= filled * price
                 elif side == 'sell':
-                    # Must have had funds available to place order in the first place
-                    if self.base_currency not in self.available_balance:
-                        raise OrderFillFailure(
-                            'No available balance in base currency {} on sell, resetting order status'.format(
-                                self.base_currency))
-                    else:
-                        self.available_balance[self.base_currency] -= filled
-
                     if self.quote_currency not in self.available_balance:
                         self.available_balance[self.quote_currency] = filled * price
                     else:
