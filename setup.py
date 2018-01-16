@@ -3,9 +3,9 @@
 from setuptools import setup, find_packages
 
 install_requires = [
-    'ws4py==0.4.3'
-    'gdax==1.0.6'
-    'python-dateutil==2.6.1'
+    'ws4py==0.4.3',
+    'gdax==1.0.6',
+    'python-dateutil==2.6.1',
 ]
 
 tests_require = [
