@@ -83,6 +83,7 @@ class Trader(WebSocketClient):
         # Order fill message
         if message_type == 'match':
             module_logger.info(log_message)
+            module_logger.info('Message type: {}'.format(message_type))
             self.on_order_fill(message)
         else:
             if self.last_heartbeat + self.heartbeat_log_interval <= datetime.now():
