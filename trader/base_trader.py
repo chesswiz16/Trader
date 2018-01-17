@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import logging
+import sys
 import time
 from datetime import datetime, timedelta
 
@@ -348,7 +349,7 @@ class Trader(WebSocketClient):
             for expected_key in expected_keys:
                 if expected_key not in message:
                     raise OrderFillFailure(
-                        'Expected key {} not received in order message, calling rest endpoint to reset: {}'.format(
+                        'Expected key {} not received in order message: {}'.format(
                             expected_key, message))
                 else:
                     checked_order_message[expected_key] = message[expected_key]
@@ -359,7 +360,7 @@ class Trader(WebSocketClient):
                 order_id = checked_order_message['taker_order_id']
                 if order_id not in self.orders:
                     raise OrderFillFailure(
-                        'Maker OID {} or Taker OID not in saved orders, calling rest endpoint to reset'.format(
+                        'Maker OID {} or Taker OID not in saved orders'.format(
                             checked_order_message['maker_order_id'], checked_order_message['taker_order_id']))
 
             # Check fill price and remaining size
@@ -398,15 +399,13 @@ class Trader(WebSocketClient):
                 else:
                     self.available_balance[self.quote_currency] += filled * price
             else:
-                raise OrderFillFailure('Unexpected side {}, resetting order status'.format(side))
+                raise OrderFillFailure('Unexpected side {}'.format(side))
 
             return checked_order_message
 
         except OrderFillFailure as e:
             module_logger.exception(e.parameter)
-            self.reset_open_orders()
-            self.reset_account_balances()
-            raise e
+            sys.exit(1)
 
     def get_balance(self, currency):
         return self.available_balance.get(currency, 0.0)
