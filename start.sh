@@ -1,7 +1,7 @@
 #!/bin/bash
 
 retry() {
-    local -r cmd="python3 start_cost_basis.py config/prod.json"
+    local -r cmd="python3 start_cost_basis.py config/prod.json ETH-USD"
     local -i attempt_num=1
 
     until $cmd
