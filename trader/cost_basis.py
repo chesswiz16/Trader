@@ -1,6 +1,7 @@
 import json
 import logging
 import math
+from time import sleep
 
 from trader.base_trader import AccountBalanceFailure
 from trader.base_trader import OrderPlacementFailure
@@ -99,6 +100,18 @@ class CostBasisTrader(Trader):
                 cost_basis, self.base_currency_bought, self.quote_currency_paid, self.current_order_depth
             ))
 
+    def wait_for_settle(self, order_id):
+        """Funds aren't available until order is in settled state
+        """
+        settled = False
+        while not settled:
+            order = self.client.get_order(order_id)
+            settled = order.get('settled', False)
+            if not settled:
+                module_logger.info('Waiting for {} to settled'.format(order_id))
+                sleep(0.4)
+        module_logger.info('{} settled'.format(order_id))
+
     def on_order_fill(self, message):
         """Actual meat of the logic. On order fill, determine where to place new orders
         """
@@ -109,7 +122,8 @@ class CostBasisTrader(Trader):
             size = float(checked_message['size'])
             filled = float(checked_message['filled_size'])
             # Wait for partial order fills to be fully filled
-            if size - filled <= 0.000000001:
+            if size - filled <= 0.00000000001:  # smaller than minimum exchange order
+                self.wait_for_settle(checked_message['order_id'])
                 # Full order fill, cancel other open orders
                 self.cancel_all()
                 if side == 'sell':

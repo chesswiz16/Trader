@@ -55,6 +55,13 @@ class AuthenticatedClientMock(object):
     def get_orders(self):
         return [[]]
 
+    # noinspection ,PyMethodMayBeStatic
+    def get_order(self, order_id):
+        return {
+            'id': order_id,
+            'settled': True,
+        }
+
     def buy(self, **kwargs):
         return self.mock_trade('buy', kwargs['price'], kwargs['size'], kwargs['type'], kwargs.get('post_only', False))
 

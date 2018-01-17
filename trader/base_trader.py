@@ -81,17 +81,34 @@ class Trader(WebSocketClient):
         message = json.loads(str(message))
         message_type = message.get('type', '')
         log_message = 'Message from websocket:{}'.format(json.dumps(message, indent=4, sort_keys=True))
-        # Order fill message
-        if message_type == 'match':
-            module_logger.info(log_message)
-            module_logger.info('Message type: {}'.format(message_type))
-            self.on_order_fill(message)
-        else:
+        if message_type == 'heartbeat':
             if self.last_heartbeat + self.heartbeat_log_interval <= datetime.now():
                 module_logger.info(log_message)
                 self.last_heartbeat = datetime.now()
+                # Also take opportunity to check for missed messages
+                self.check_missed_fills()
             else:
                 module_logger.debug(log_message)
+        # Order fill message
+        else:
+            module_logger.info(log_message)
+            module_logger.info('Message type: {}'.format(message_type))
+            if message_type == 'match':
+                self.on_order_fill(message)
+
+    def check_missed_fills(self):
+        for order_id, order in self.orders.items():
+            order_status = self.client.get_order(order_id)
+            if float(order_status.get('filled_size', 0)) > float(order.get('filled_size', 0)):
+                # We've missed a fill, rectify that
+                module_logger.info('Missed fill for {}'.format(order_id))
+                message = {
+                    'maker_order_id': order_id,
+                    'price': order_status['executed_value'],
+                    'size': order_status['size'],
+                    'side': order_status['side'],
+                }
+                self.on_order_fill(message)
 
     def closed(self, code, reason=None):
         module_logger.info('Closed down. Code: {} Reason: {}'.format(code, reason))
@@ -255,6 +272,7 @@ class Trader(WebSocketClient):
                 module_logger.warning(
                     'Error placing {} {} order for {} {} @ {}, retrying. Message from api: {}'.format(
                         side, order_type, size, self.product_id, price, result['message']))
+                time.sleep(1)
             else:
                 self.orders[result['id']] = result
                 module_logger.info(
@@ -360,7 +378,7 @@ class Trader(WebSocketClient):
                 order_id = checked_order_message['taker_order_id']
                 if order_id not in self.orders:
                     raise OrderFillFailure(
-                        'Maker OID {} or Taker OID not in saved orders'.format(
+                        'Maker OID {} or Taker OID {} not in saved orders'.format(
                             checked_order_message['maker_order_id'], checked_order_message['taker_order_id']))
 
             # Check fill price and remaining size
