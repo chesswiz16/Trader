@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import time
+from datetime import datetime, timedelta
 
 from ws4py.client.threadedclient import WebSocketClient
 
@@ -14,6 +15,8 @@ module_logger = logging.getLogger(__name__)
 
 class Trader(WebSocketClient):
     def __init__(self, product_id, auth_client=None, api_key='', secret_key='', pass_phrase='', api_url='', ws_url=''):
+        self.last_heartbeat = datetime.now()
+        self.heartbeat_log_interval = timedelta(minutes=2)
         self.product_id = product_id
         self.api_key = api_key
         self.secret_key = secret_key
@@ -77,12 +80,17 @@ class Trader(WebSocketClient):
         message = json.loads(str(message))
         message_type = message.get('type', '')
         message_reason = message.get('reason', '')
+        log_message = 'Message from websocket:{}'.format(json.dumps(message, indent=4, sort_keys=True))
         # Order fill message
         if message_type == 'done' and message_reason == 'filled':
-            module_logger.info('Message from websocket:{}'.format(json.dumps(message, indent=4, sort_keys=True)))
+            module_logger.info(log_message)
             self.on_order_fill(message)
         else:
-            module_logger.debug('Message from websocket:{}'.format(json.dumps(message, indent=4, sort_keys=True)))
+            if self.last_heartbeat + self.heartbeat_log_interval <= datetime.now():
+                module_logger.info(log_message)
+                self.last_heartbeat = datetime.now()
+            else:
+                module_logger.debug(log_message)
 
     def closed(self, code, reason=None):
         module_logger.info('Closed down. Code: {} Reason: {}'.format(code, reason))
