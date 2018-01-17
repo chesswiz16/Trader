@@ -74,12 +74,15 @@ class Trader(WebSocketClient):
         self.send(json.dumps(params))
 
     def received_message(self, message):
-        module_logger.debug('Message from websocket:{}'.format(message))
+        message = json.loads(str(message))
         message_type = message.get('type', '')
         message_reason = message.get('reason', '')
         # Order fill message
         if message_type == 'done' and message_reason == 'filled':
+            module_logger.info('Message from websocket:{}'.format(json.dumps(message, indent=4, sort_keys=True)))
             self.on_order_fill(message)
+        else:
+            module_logger.debug('Message from websocket:{}'.format(json.dumps(message, indent=4, sort_keys=True)))
 
     def closed(self, code, reason=None):
         module_logger.info('Closed down. Code: {} Reason: {}'.format(code, reason))
