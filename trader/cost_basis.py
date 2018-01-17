@@ -94,7 +94,7 @@ class CostBasisTrader(Trader):
         self.quote_currency_paid = self.base_currency_bought * cost_basis
         # Guess at the order depth. If my math was better I'm sure we could be more accurate
         self.current_order_depth = math.floor(
-            self.quote_currency_paid / (self.available_balance[self.quote_currency] * self.wallet_fraction))
+            self.quote_currency_paid / (self.get_balance(self.quote_currency) * self.wallet_fraction))
         module_logger.info(
             'Recovered with cost basis: {} ccy bought: {} price paid: {} order depth: {}'.format(
                 cost_basis, self.base_currency_bought, self.quote_currency_paid, self.current_order_depth
@@ -134,6 +134,7 @@ class CostBasisTrader(Trader):
                     self.current_order_depth += 1
                     self.quote_currency_paid += price * size
                     self.base_currency_bought += size
+                    self.base_currency_bought = self.to_size_increment(self.base_currency_bought)
                     cost_basis = self.quote_currency_paid / self.base_currency_bought
                     module_logger.info(
                         'Order Depth: {}, Cost Basis: {} ({}/{}), targeting {}/{}'.format(

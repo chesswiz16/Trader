@@ -26,7 +26,7 @@ class TestCostBasis(unittest.TestCase):
         stop_order = [x for x in trader.orders.values() if x['type'] == 'stop'][0]
         limit_order = [x for x in trader.orders.values() if x['type'] == 'limit'][0]
         self.assertEqual(len(trader.orders), 2)
-        available_balance = trader.available_balance['USD']
+        available_balance = trader.get_balance('USD')
         self.assertEqual(available_balance, 8000)
         trader.on_order_fill({
             'maker_order_id': limit_order['id'],
@@ -51,24 +51,25 @@ class TestCostBasis(unittest.TestCase):
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in trader.orders.values()])
         expected = {
             'side': 'buy',
-            'size': '9.2939495969799',
+            'size': '9.2939496',
             'price': '96.94',
             'type': 'limit',
             'post_only': True,
         }
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in trader.orders.values()])
         self.assertAlmostEqual(
-            trader.available_balance['USD'],
+            trader.get_balance('USD'),
             available_balance +
             float(stop_order['size']) * float(stop_order['price']) -
-            float(expected['size']) * float(expected['price'])
+            float(expected['size']) * float(expected['price']),
+            places=2,
         )
         auth_client_mock.cancel_order.assert_called_with(stop_order['id'])
 
         # Get the buy order and mock that it's filled
         buy_order = [x for x in trader.orders.values() if x['side'] == 'buy'][0]
         sell_order = [x for x in trader.orders.values() if x['side'] == 'sell'][0]
-        available_balance = trader.available_balance['USD']
+        available_balance = trader.get_balance('USD')
         trader.on_order_fill({
             'maker_order_id': buy_order['id'],
             'taker_order_id': '',
@@ -79,12 +80,12 @@ class TestCostBasis(unittest.TestCase):
         })
         self.assertTrue(buy_order['id'] not in trader.orders)
         self.assertEqual(trader.current_order_depth, 2)
-        self.assertEqual(trader.quote_currency_paid, 1890.9554739312316)
-        self.assertEqual(trader.base_currency_bought, 19.2939495969799)
+        self.assertEqual(trader.quote_currency_paid, 1890.9554742239998)
+        self.assertEqual(trader.base_currency_bought, 19.2939496)
         self.assertEqual(len(trader.orders), 2)
         expected = {
             'side': 'sell',
-            'size': '19.2939495969799',
+            'size': '19.2939496',
             'price': '98.99',
             'type': 'limit',
             'post_only': True,
@@ -92,23 +93,24 @@ class TestCostBasis(unittest.TestCase):
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in trader.orders.values()])
         expected = {
             'side': 'buy',
-            'size': '8.55234877973307',
+            'size': '8.55234412',
             'price': '94.82',
             'type': 'limit',
             'post_only': True,
         }
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in trader.orders.values()])
         self.assertAlmostEqual(
-            trader.available_balance['USD'],
+            trader.get_balance('USD'),
             available_balance -
-            float(expected['size']) * float(expected['price'])
+            float(expected['size']) * float(expected['price']),
+            places=2,
         )
         auth_client_mock.cancel_order.assert_called_with(sell_order['id'])
 
         # 3 deep now, mock a partial fill
         buy_order = [x for x in trader.orders.values() if x['side'] == 'buy'][0]
         sell_order = [x for x in trader.orders.values() if x['side'] == 'sell'][0]
-        available_balance = trader.available_balance['USD']
+        available_balance = trader.get_balance('USD')
         trader.on_order_fill({
             'maker_order_id': buy_order['id'],
             'taker_order_id': '',
@@ -118,8 +120,8 @@ class TestCostBasis(unittest.TestCase):
             'size': str(float(buy_order['size']) - 1),
         })
         self.assertEqual(trader.current_order_depth, 2)
-        self.assertEqual(trader.quote_currency_paid, 1890.9554739312316)
-        self.assertEqual(trader.base_currency_bought, 19.2939495969799)
+        self.assertEqual(trader.quote_currency_paid, 1890.9554742239998)
+        self.assertEqual(trader.base_currency_bought, 19.2939496)
         self.assertEqual(
             float(trader.orders[buy_order['id']]['size']) - float(trader.orders[buy_order['id']]['filled_size']), 1)
         trader.on_order_fill({
@@ -132,12 +134,12 @@ class TestCostBasis(unittest.TestCase):
         })
         self.assertTrue(buy_order['id'] not in trader.orders)
         self.assertEqual(trader.current_order_depth, 3)
-        self.assertEqual(trader.quote_currency_paid, 2701.889185225521)
-        self.assertEqual(trader.base_currency_bought, 27.84629837671297)
+        self.assertEqual(trader.quote_currency_paid, 2701.8887436823998)
+        self.assertEqual(trader.base_currency_bought, 27.84629372)
         self.assertEqual(len(trader.orders), 2)
         expected = {
             'side': 'sell',
-            'size': '27.84629837671297',
+            'size': '27.84629372',
             'price': '98.0',
             'type': 'limit',
             'post_only': True,
@@ -145,23 +147,24 @@ class TestCostBasis(unittest.TestCase):
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in trader.orders.values()])
         expected = {
             'side': 'buy',
-            'size': '7.8788542793980305',
+            'size': '7.87885336',
             'price': '92.63',
             'type': 'limit',
             'post_only': True,
         }
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in trader.orders.values()])
         self.assertAlmostEqual(
-            trader.available_balance['USD'],
+            trader.get_balance('USD'),
             available_balance -
-            float(expected['size']) * float(expected['price'])
+            float(expected['size']) * float(expected['price']),
+            places=2,
         )
         auth_client_mock.cancel_order.assert_called_with(sell_order['id'])
 
         # 4 deep, sell should go out but no buy
         buy_order = [x for x in trader.orders.values() if x['side'] == 'buy'][0]
         sell_order = [x for x in trader.orders.values() if x['side'] == 'sell'][0]
-        available_balance = trader.available_balance['USD']
+        available_balance = trader.get_balance('USD')
         # Pretend we're taker this time
         trader.on_order_fill({
             'maker_order_id': '',
@@ -173,18 +176,18 @@ class TestCostBasis(unittest.TestCase):
         })
         self.assertTrue(buy_order['id'] not in trader.orders)
         self.assertEqual(trader.current_order_depth, 4)
-        self.assertEqual(trader.quote_currency_paid, 3431.7074571261605)
-        self.assertEqual(trader.base_currency_bought, 35.725152656111)
+        self.assertEqual(trader.quote_currency_paid, 3431.7069304191996)
+        self.assertEqual(trader.base_currency_bought, 35.72514708)
         self.assertEqual(len(trader.orders), 1)
         expected = {
             'side': 'sell',
-            'size': '35.725152656111',
+            'size': '35.72514708',
             'price': '97.02',
             'type': 'limit',
             'post_only': True,
         }
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in trader.orders.values()])
-        self.assertAlmostEqual(trader.available_balance['USD'], available_balance)
+        self.assertAlmostEqual(trader.get_balance('USD'), available_balance)
         auth_client_mock.cancel_order.assert_called_with(sell_order['id'])
 
         # Sell comes in, should reset the cost basis to market
@@ -204,7 +207,7 @@ class TestCostBasis(unittest.TestCase):
         self.assertEqual(len(trader.orders), 2)
         expected = {
             'side': 'buy',
-            'size': '10.03434685',
+            'size': '10.03434',
             'price': '101.0',
             'type': 'stop',
             'post_only': False,
@@ -212,13 +215,13 @@ class TestCostBasis(unittest.TestCase):
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in trader.orders.values()])
         expected = {
             'side': 'buy',
-            'size': '10.03434685',
+            'size': '10.03434',
             'price': '99.0',
             'type': 'limit',
             'post_only': True,
         }
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in trader.orders.values()])
-        wallet_value = trader.available_balance['USD']
+        wallet_value = trader.get_balance('USD')
         for order in trader.orders.values():
             wallet_value += float(order['size']) * float(order['price'])
         # Make sure we actually made money...

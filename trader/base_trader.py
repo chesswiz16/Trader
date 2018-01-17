@@ -142,7 +142,7 @@ class Trader(WebSocketClient):
                 module_logger.error('Account lookup failure for {} from {}'.format(
                     currency, json.dumps(accounts, indent=4, sort_keys=True)))
                 raise AccountBalanceFailure(currency + ' not found in active accounts')
-            self.available_balance[currency] = float(account[0]['available'])
+            self.add_balance(currency, float(account[0]['available']))
             module_logger.info(
                 'Set available account balances: {}'.format(json.dumps(accounts, indent=4, sort_keys=True)))
 
@@ -214,6 +214,7 @@ class Trader(WebSocketClient):
         """Makes a call to the rest order endpoint. On failure, tries again n times widening the bid/ask
         by 0.6% each time in case the order would result in taking liquidity (and thus accruing fees)
         """
+        size = self.to_size_increment(size)
         if size < self.base_min_size or size > self.base_max_size:
             raise OrderPlacementFailure('Size of {} outside of exchange limits'.format(size))
         if side is 'buy':
@@ -279,9 +280,9 @@ class Trader(WebSocketClient):
                     'Placed {} {} order for {} {} @ {}'.format(side, order_type, size, self.product_id, price))
                 # Update account balances
                 if side is 'buy':
-                    self.available_balance[self.quote_currency] -= size * price
+                    self.add_balance(self.quote_currency, -1 * size * price)
                 else:
-                    self.available_balance[self.base_currency] -= size
+                    self.add_balance(self.base_currency, -1 * size)
                 return
         # Failed on decaying price, raise an exception
         message = 'Error placing {} order of type {}. Retried {} times, giving up'.format(side, order_type, retries)
@@ -310,9 +311,9 @@ class Trader(WebSocketClient):
         # Add back order size to available balance
         for order in self.orders.values():
             if order['side'] == 'buy':
-                self.available_balance[self.quote_currency] += float(order['price']) * float(order['size'])
+                self.add_balance(self.quote_currency, float(order['price']) * float(order['size']))
             else:
-                self.available_balance[self.base_currency] += float(order['size'])
+                self.add_balance(self.base_currency, float(order['size']))
         self.orders = {}
 
     def on_order_fill(self, message):
@@ -407,15 +408,9 @@ class Trader(WebSocketClient):
                 self.orders[order_id]['filled_size'] = filled
 
             if side == 'buy':
-                if self.base_currency not in self.available_balance:
-                    self.available_balance[self.base_currency] = filled
-                else:
-                    self.available_balance[self.base_currency] += filled
+                self.add_balance(self.base_currency, filled)
             elif side == 'sell':
-                if self.quote_currency not in self.available_balance:
-                    self.available_balance[self.quote_currency] = filled * price
-                else:
-                    self.available_balance[self.quote_currency] += filled * price
+                self.add_balance(self.quote_currency, filled * price)
             else:
                 raise OrderFillFailure('Unexpected side {}'.format(side))
 
@@ -427,6 +422,10 @@ class Trader(WebSocketClient):
 
     def get_balance(self, currency):
         return self.available_balance.get(currency, 0.0)
+
+    def add_balance(self, currency, balance):
+        current = self.available_balance.get(currency, 0.0)
+        self.available_balance[currency] = self.to_size_increment(current + balance, base_currency=currency)
 
     def to_price_increment(self, price):
         """Round to nearest price increment.
