@@ -179,35 +179,24 @@ class TestTrader(unittest.TestCase):
             'BTC': 10,
         }
         trader.on_order_fill({
-            'order_id': 'id1',
-            'type': 'done',
+            'maker_order_id': 'id1',
+            'taker_order_id': '',
+            'type': 'match',
             'price': '101.5',
             'side': 'buy',
-            'reason': 'filled',
-            'remaining_size': '5',
+            'size': '15',
         })
         self.assertEqual(trader.orders['id1']['size'], '20')
         self.assertEqual(trader.orders['id1']['filled_size'], 15)
         self.assertEqual(trader.available_balance['USD'], 20 * 105)
         self.assertEqual(trader.available_balance['BTC'], 25)
         trader.on_order_fill({
-            'order_id': 'id2',
-            'type': 'done',
-            'price': '99',
-            'side': 'buy',
-            'reason': 'canceled',
-            'remaining_size': '0',
-        })
-        self.assertTrue('id2' not in trader.orders)
-        self.assertEqual(trader.available_balance['USD'], 20 * 105)
-        self.assertEqual(trader.available_balance['BTC'], 25)
-        trader.on_order_fill({
-            'order_id': 'id3',
-            'type': 'done',
+            'maker_order_id': '',
+            'taker_order_id': 'id3',
+            'type': 'match',
             'price': '90',
-            'side': 'sell',
-            'reason': 'filled',
-            'remaining_size': '0',
+            'side': 'buy',
+            'size': '10',
         })
         self.assertTrue('id3' not in trader.orders)
         self.assertEqual(trader.available_balance['USD'], 20 * 105 + 90 * 10)

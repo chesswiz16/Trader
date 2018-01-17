@@ -29,12 +29,12 @@ class TestCostBasis(unittest.TestCase):
         available_balance = trader.available_balance['USD']
         self.assertEqual(available_balance, 8000)
         trader.on_order_fill({
-            'order_id': limit_order['id'],
-            'type': 'done',
+            'maker_order_id': limit_order['id'],
+            'taker_order_id': '',
+            'type': 'match',
             'price': limit_order['price'],
             'side': 'buy',
-            'reason': 'filled',
-            'remaining_size': '0',
+            'size': limit_order['size'],
         })
         self.assertTrue(limit_order['id'] not in trader.orders)
         self.assertEqual(trader.current_order_depth, 1)
@@ -70,12 +70,12 @@ class TestCostBasis(unittest.TestCase):
         sell_order = [x for x in trader.orders.values() if x['side'] == 'sell'][0]
         available_balance = trader.available_balance['USD']
         trader.on_order_fill({
-            'order_id': buy_order['id'],
-            'type': 'done',
+            'maker_order_id': buy_order['id'],
+            'taker_order_id': '',
+            'type': 'match',
             'price': buy_order['price'],
             'side': 'buy',
-            'reason': 'filled',
-            'remaining_size': '0',
+            'size': buy_order['size'],
         })
         self.assertTrue(buy_order['id'] not in trader.orders)
         self.assertEqual(trader.current_order_depth, 2)
@@ -110,12 +110,12 @@ class TestCostBasis(unittest.TestCase):
         sell_order = [x for x in trader.orders.values() if x['side'] == 'sell'][0]
         available_balance = trader.available_balance['USD']
         trader.on_order_fill({
-            'order_id': buy_order['id'],
-            'type': 'done',
+            'maker_order_id': buy_order['id'],
+            'taker_order_id': '',
+            'type': 'match',
             'price': buy_order['price'],
             'side': 'buy',
-            'reason': 'filled',
-            'remaining_size': '1',
+            'size': str(float(buy_order['size']) - 1),
         })
         self.assertEqual(trader.current_order_depth, 2)
         self.assertEqual(trader.quote_currency_paid, 1890.9554739312316)
@@ -123,12 +123,12 @@ class TestCostBasis(unittest.TestCase):
         self.assertEqual(
             float(trader.orders[buy_order['id']]['size']) - float(trader.orders[buy_order['id']]['filled_size']), 1)
         trader.on_order_fill({
-            'order_id': buy_order['id'],
-            'type': 'done',
+            'maker_order_id': buy_order['id'],
+            'taker_order_id': '',
+            'type': 'match',
             'price': buy_order['price'],
             'side': 'buy',
-            'reason': 'filled',
-            'remaining_size': '0',
+            'size': '1',
         })
         self.assertTrue(buy_order['id'] not in trader.orders)
         self.assertEqual(trader.current_order_depth, 3)
@@ -162,13 +162,14 @@ class TestCostBasis(unittest.TestCase):
         buy_order = [x for x in trader.orders.values() if x['side'] == 'buy'][0]
         sell_order = [x for x in trader.orders.values() if x['side'] == 'sell'][0]
         available_balance = trader.available_balance['USD']
+        # Pretend we're taker this time
         trader.on_order_fill({
-            'order_id': buy_order['id'],
-            'type': 'done',
+            'maker_order_id': '',
+            'taker_order_id': buy_order['id'],
+            'type': 'match',
             'price': buy_order['price'],
-            'side': 'buy',
-            'reason': 'filled',
-            'remaining_size': '0',
+            'side': 'sell',
+            'size': buy_order['size'],
         })
         self.assertTrue(buy_order['id'] not in trader.orders)
         self.assertEqual(trader.current_order_depth, 4)
@@ -189,12 +190,12 @@ class TestCostBasis(unittest.TestCase):
         # Sell comes in, should reset the cost basis to market
         sell_order = [x for x in trader.orders.values() if x['side'] == 'sell'][0]
         trader.on_order_fill({
-            'order_id': sell_order['id'],
-            'type': 'done',
+            'maker_order_id': sell_order['id'],
+            'taker_order_id': '',
+            'type': 'match',
             'price': sell_order['price'],
             'side': 'sell',
-            'reason': 'filled',
-            'remaining_size': '0',
+            'size': sell_order['size'],
         })
         self.assertTrue(sell_order['id'] not in trader.orders)
         self.assertEqual(trader.current_order_depth, 0)

@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 from time import sleep
 
 import dateutil.parser
-from gdax.public_client import PublicClient
 
+from gdax.public_client import PublicClient
 from regression.authenticated_client_regression import AuthenticatedClientRegression
 from trader.cost_basis import CostBasisTrader
 
@@ -81,12 +81,12 @@ if __name__ == '__main__':
                     fee_trades += 1
                     fees += 0.003 * float(order['size']) * float(order['price'])
                 trader.on_order_fill({
-                    'order_id': order['id'],
-                    'type': 'done',
+                    'maker_order_id': order['id'],
+                    'taker_order_id': '',
+                    'type': 'match',
                     'price': order['price'],
                     'side': order['side'],
-                    'reason': 'filled',
-                    'remaining_size': '0',
+                    'size': order['size'],
                 })
                 regression_client.last_rates = candle
         current_time = next_time

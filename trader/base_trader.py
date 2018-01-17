@@ -79,10 +79,9 @@ class Trader(WebSocketClient):
     def received_message(self, message):
         message = json.loads(str(message))
         message_type = message.get('type', '')
-        message_reason = message.get('reason', '')
         log_message = 'Message from websocket:{}'.format(json.dumps(message, indent=4, sort_keys=True))
         # Order fill message
-        if message_type == 'done' and message_reason == 'filled':
+        if message_type == 'match':
             module_logger.info(log_message)
             self.on_order_fill(message)
         else:
@@ -297,30 +296,53 @@ class Trader(WebSocketClient):
         self.orders = {}
 
     def on_order_fill(self, message):
-        """Action to take on order fill/cancel. Base implementation simply updates the order cache and currency balances.
+        """Action to take on order match. Base implementation simply updates the order cache and currency balances.
         Assumes messages come from the "user" channel documented in
         https://docs.gdax.com/#the-code-classprettyprintfullcode-channel.
 
         Any order_id's not saved already are assumed to be an error condition triggering a new call to the
         authenticated rest endpoint.
         Expects a json message of the below format:
+        Limit Sell where we are maker (side matches us):
         {
-            "type": "done",
-            "time": "2014-11-07T08:19:27.028459Z",
-            "product_id": "BTC-USD",
-            "sequence": 10,
-            "price": "200.2",
-            "order_id": "d50ec984-77a8-460a-b958-66f114b0de9b",
-            "reason": "filled", // or "canceled"
+            "maker_order_id": "1bb486ee-00c2-4136-b16a-702c79f94679",
+            "maker_profile_id": "da6d26a2-9618-47f9-a9c2-1f167ba166f7",
+            "maker_user_id": "bleh",
+            "price": "998.00000000",
+            "product_id": "ETH-USD",
+            "profile_id": "da6d26a2-9618-47f9-a9c2-1f167ba166f7",
+            "sequence": 2061395972,
             "side": "sell",
-            "remaining_size": "0"
+            "size": "0.06780153",
+            "taker_order_id": "86ab4e20-383e-4b15-ac60-68291fa9572d",
+            "time": "2018-01-17T05:09:01.544000Z",
+            "trade_id": 26289716,
+            "type": "match",
+            "user_id": "bleh"
+        }
+        Stop BUY (note side flipped) where we are taker
+        {
+            "maker_order_id": "3b2ef64d-d14e-4507-b019-3fb27b98f1c3",
+            "price": "986.03000000",
+            "product_id": "ETH-USD",
+            "profile_id": "da6d26a2-9618-47f9-a9c2-1f167ba166f7",
+            "sequence": 2061692341,
+            "side": "sell",
+            "size": "0.01011134",
+            "taker_order_id": "05b0bd06-fe1a-4ef8-b984-594636fc7ecb",
+            "taker_profile_id": "da6d26a2-9618-47f9-a9c2-1f167ba166f7",
+            "taker_user_id": "bleh",
+            "time": "2018-01-17T05:24:14.048000Z",
+            "trade_id": 26291878,
+            "type": "match",
+            "user_id": "bleh"
         }
         """
         try:
-            if 'type' not in message or message['type'] is not 'done':
+            if 'type' not in message or message['type'] != 'match':
                 raise OrderFillFailure(
                     'Unexpected type {}, resetting order/account status'.format(message.get('type', 'unknown')))
-            expected_keys = ['order_id', 'reason', 'side', 'remaining_size', 'price']
+            expected_keys = ['maker_order_id', 'taker_order_id', 'side', 'size', 'price']
             checked_order_message = {}
             for expected_key in expected_keys:
                 if expected_key not in message:
@@ -331,52 +353,54 @@ class Trader(WebSocketClient):
                     checked_order_message[expected_key] = message[expected_key]
 
             # Check order id has been saved
-            order_id = checked_order_message['order_id']
+            order_id = checked_order_message['maker_order_id']
             if order_id not in self.orders:
-                raise OrderFillFailure(
-                    'Order Id {} not in saved orders, calling rest endpoint to reset'.format(
-                        checked_order_message['order_id']))
+                order_id = checked_order_message['taker_order_id']
+                if order_id not in self.orders:
+                    raise OrderFillFailure(
+                        'Maker OID {} or Taker OID not in saved orders, calling rest endpoint to reset'.format(
+                            checked_order_message['maker_order_id'], checked_order_message['taker_order_id']))
 
-            # Update account/order status
-            if checked_order_message['reason'] == 'canceled':
-                # Shouldn't get here as we're filtering cancel message on the WS feed.
-                if order_id in self.orders:
-                    self.orders.pop(order_id)
-                module_logger.info('Order {} cancelled from exchange'.format(order_id))
-                return {}
-            elif checked_order_message['reason'] == 'filled':
-                # Check fill price and remaining size
-                side = checked_order_message['side']
-                price = float(checked_order_message['price'])
-                remaining = float(checked_order_message['remaining_size'])
-                original = float(self.orders[order_id]['size'])
-                filled = original - remaining
-                checked_order_message['size'] = original
-                checked_order_message['filled_size'] = filled
-                module_logger.info('Order {} filled for {} {} {} @ {}, remaining {}'.format(
-                    order_id, side, original, self.base_currency, price, remaining))
-                if remaining == 0:
-                    self.orders.pop(order_id)
-                else:
-                    self.orders[order_id]['filled_size'] = filled
-
+            # Check fill price and remaining size
+            side = checked_order_message['side']
+            # Flip side if we were taker
+            if order_id == checked_order_message['taker_order_id']:
                 if side == 'buy':
-                    if self.base_currency not in self.available_balance:
-                        self.available_balance[self.base_currency] = filled
-                    else:
-                        self.available_balance[self.base_currency] += filled
-                elif side == 'sell':
-                    if self.quote_currency not in self.available_balance:
-                        self.available_balance[self.quote_currency] = filled * price
-                    else:
-                        self.available_balance[self.quote_currency] += filled * price
+                    side = 'sell'
                 else:
-                    raise OrderFillFailure('Unexpected side {}, resetting order status'.format(side))
-                return checked_order_message
+                    side = 'buy'
+                checked_order_message['side'] = side
+
+            price = float(checked_order_message['price'])
+            original = float(self.orders[order_id]['size'])
+            filled = float(checked_order_message['size'])
+            filled += float(self.orders[order_id].get('filled_size', 0))
+            remaining = original - filled
+            checked_order_message['order_id'] = order_id
+            checked_order_message['size'] = original
+            checked_order_message['filled_size'] = filled
+            module_logger.info('Order {} filled for {} {} {} @ {}, remaining {}'.format(
+                order_id, side, original, self.base_currency, price, remaining))
+            if remaining == 0:
+                self.orders.pop(order_id)
             else:
-                raise OrderFillFailure(
-                    'Unknown order done reason {}, calling rest endpoint to reset'.format(
-                        checked_order_message['reason']))
+                self.orders[order_id]['filled_size'] = filled
+
+            if side == 'buy':
+                if self.base_currency not in self.available_balance:
+                    self.available_balance[self.base_currency] = filled
+                else:
+                    self.available_balance[self.base_currency] += filled
+            elif side == 'sell':
+                if self.quote_currency not in self.available_balance:
+                    self.available_balance[self.quote_currency] = filled * price
+                else:
+                    self.available_balance[self.quote_currency] += filled * price
+            else:
+                raise OrderFillFailure('Unexpected side {}, resetting order status'.format(side))
+
+            return checked_order_message
+
         except OrderFillFailure as e:
             module_logger.exception(e.parameter)
             self.reset_open_orders()
