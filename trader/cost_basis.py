@@ -168,4 +168,9 @@ if __name__ == '__main__':
         api_url=data['endpoints']['rest'],
         ws_url=data['endpoints']['socket'],
     )
-    trader.on_start()
+    try:
+        trader.on_start()
+        trader.connect()
+        trader.run_forever()
+    except KeyboardInterrupt:
+        trader.close()
