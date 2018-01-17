@@ -203,7 +203,7 @@ class TestCostBasis(unittest.TestCase):
         self.assertEqual(len(trader.orders), 2)
         expected = {
             'side': 'buy',
-            'size': '10.034346853569728',
+            'size': '10.03434685',
             'price': '101.0',
             'type': 'stop',
             'post_only': False,
@@ -211,7 +211,7 @@ class TestCostBasis(unittest.TestCase):
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in trader.orders.values()])
         expected = {
             'side': 'buy',
-            'size': '10.034346853569728',
+            'size': '10.03434685',
             'price': '99.0',
             'type': 'limit',
             'post_only': True,

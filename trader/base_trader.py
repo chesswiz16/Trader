@@ -5,8 +5,9 @@ import json
 import logging
 import time
 
-from gdax.authenticated_client import AuthenticatedClient
 from ws4py.client.threadedclient import WebSocketClient
+
+from gdax.authenticated_client import AuthenticatedClient
 
 module_logger = logging.getLogger(__name__)
 
@@ -384,14 +385,10 @@ class Trader(WebSocketClient):
         return round(price) + (increments * self.quote_increment)
 
     def to_size_increment(self, size_base_ccy, base_currency=''):
-        """1 satoshi or wei
-        """
         if base_currency == '':
             base_currency = self.base_currency
-        if base_currency == 'BTC':
+        if base_currency in ['BTC', 'ETH', 'LTC', 'BCH']:
             return round(size_base_ccy, 8)
-        elif base_currency == 'ETH':
-            return round(size_base_ccy, 18)
         else:
             return round(size_base_ccy, 2)
 
