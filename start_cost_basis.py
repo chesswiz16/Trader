@@ -45,8 +45,8 @@ if __name__ == '__main__':
         file = sys.argv[1]
         product_id = sys.argv[2]
     else:
-        file = 'config/sandbox.json'
-        product_id = 'BTC-USD'
+        file = 'config/prod.json'
+        product_id = 'ETH-USD'
 
     with open(file) as config:
         data = json.load(config)
