@@ -55,7 +55,7 @@ if __name__ == '__main__':
         product_id,
         data['cost_basis']['order_depth'],
         data['cost_basis']['wallet_fraction'],
-        delta=['cost_basis']['delta'],
+        delta=float(['cost_basis']['delta']),
         api_key=data['auth']['key'],
         secret_key=data['auth']['secret'],
         pass_phrase=data['auth']['phrase'],
