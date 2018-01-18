@@ -52,11 +52,11 @@ if __name__ == '__main__':
         data['auth']['phrase'],
         api_url=data['endpoints']['rest']
     )
-    accounts = auth_client.get_accounts()
     running = True
     while running:
         try:
             total = 0.0
+            accounts = auth_client.get_accounts()
             for account in accounts:
                 balance = float(account['balance'])
                 if balance > 0:
