@@ -161,10 +161,12 @@ class TestCostBasis(unittest.TestCase):
             {
                 'currency': 'ETH',
                 'available': '0',
+                'id': '1',
             },
             {
                 'currency': 'USD',
                 'available': '10000',
+                'id': '2',
             },
         ])
         auth_client_mock.cancel_order = MagicMock(return_value={})
@@ -181,22 +183,24 @@ class TestCostBasis(unittest.TestCase):
 
         # Has seeding orders, assert orders are the same
         trader = CostBasisTrader('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
-        orders = {
-            'id1': {
+        orders = [
+            {
+                'id': 'id1',
                 'side': 'buy',
                 'size': '20',
                 'price': '101.0',
                 'type': 'stop',
                 'post_only': False,
             },
-            'id2': {
+            {
+                'id': 'id1',
                 'side': 'buy',
                 'size': '20',
                 'price': '99.0',
                 'type': 'limit',
                 'post_only': True,
             },
-        }
+        ]
         auth_client_mock.orders = orders
         trader.on_start()
         self.assertTrue(len(auth_client_mock.orders), 2)
@@ -207,22 +211,24 @@ class TestCostBasis(unittest.TestCase):
 
         # Has limit buy and sell, pick up where we were
         trader = CostBasisTrader('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
-        orders = {
-            'id1': {
+        orders = [
+            {
+                'id': 'id1',
                 'side': 'sell',
                 'size': '20',
                 'price': '101.0',
                 'type': 'limit',
                 'post_only': True,
             },
-            'id2': {
+            {
+                'id': 'id1',
                 'side': 'buy',
                 'size': '20',
                 'price': '99.0',
                 'type': 'limit',
                 'post_only': True,
             },
-        }
+        ]
         auth_client_mock.orders = orders
         trader.on_start()
         self.assertTrue(len(auth_client_mock.orders), 2)
@@ -233,15 +239,16 @@ class TestCostBasis(unittest.TestCase):
 
         # Has limit sell, pick up where we were
         trader = CostBasisTrader('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
-        orders = {
-            'id1': {
+        orders = [
+            {
+                'id': 'id1',
                 'side': 'sell',
                 'size': '20',
                 'price': '101.0',
                 'type': 'limit',
                 'post_only': True,
             },
-        }
+        ]
         auth_client_mock.orders = orders
         trader.on_start()
         self.assertTrue(len(auth_client_mock.orders), 2)
@@ -252,15 +259,16 @@ class TestCostBasis(unittest.TestCase):
 
         # Only has buy, reset
         trader = CostBasisTrader('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
-        orders = {
-            'id2': {
+        orders = [
+            {
+                'id': 'id1',
                 'side': 'buy',
                 'size': '20',
                 'price': '99.0',
                 'type': 'limit',
                 'post_only': True,
             },
-        }
+        ]
         auth_client_mock.orders = orders
         trader.on_start()
         self.assertTrue(len(auth_client_mock.orders), 2)
@@ -270,29 +278,32 @@ class TestCostBasis(unittest.TestCase):
 
         # Weird order state, resets status
         trader = CostBasisTrader('ETH-USD', 3, 0.1, auth_client=auth_client_mock)
-        orders = {
-            'id1': {
+        orders = [
+            {
+                'id': 'id1',
                 'side': 'sell',
                 'size': '20',
                 'price': '101.0',
                 'type': 'limit',
                 'post_only': True,
             },
-            'id2': {
+            {
+                'id': 'id1',
                 'side': 'buy',
                 'size': '20',
                 'price': '99.0',
                 'type': 'limit',
                 'post_only': True,
             },
-            'id3': {
+            {
+                'id': 'id1',
                 'side': 'buy',
                 'size': '20',
                 'price': '99.0',
                 'type': 'limit',
                 'post_only': True,
             },
-        }
+        ]
         auth_client_mock.orders = orders
         self.assertTrue(len(auth_client_mock.orders), 2)
         self.assertEqual(trader.base_currency_bought, 0.0)

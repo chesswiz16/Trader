@@ -47,7 +47,7 @@ class Trader(WebSocketClient):
         # Query for account balances
         self.reset_account_balances()
         # Queue of last (1000ish) filled orders for checking missed fills
-        self.done_orders = []
+        self.opened_orders = []
         # Bind to websocket
         if ws_url != '':
             WebSocketClient.__init__(self, ws_url)
@@ -81,12 +81,15 @@ class Trader(WebSocketClient):
     def closed(self, code, reason=None):
         module_logger.info('Closed down. Code: {} Reason: {}'.format(code, reason))
 
-    def cache_done(self, order_id):
+    def cache_orders(self, order_id):
         """Sliding window of IDs
         """
-        self.done_orders.append(order_id)
-        if len(self.done_orders) > 1200:
-            self.done_orders.pop(0)
+        self.opened_orders.append(order_id)
+        if len(self.opened_orders) > 1200:
+            self.opened_orders.pop(0)
+
+    def remove_order(self, order_id):
+        self.opened_orders = [x for x in self.opened_orders if x != order_id]
 
     def received_message(self, message):
         message = json.loads(str(message))
@@ -147,16 +150,16 @@ class Trader(WebSocketClient):
         """
         accounts = [v['id'] for v in self.accounts.values()]
         for account in accounts:
-            history = self.client.get_account_history(account)
+            history = self.client.get_account_history(account)[0]
             matches = [x for x in history if x['type'] == 'match']
             order_ids = [x['details']['order_id'] for x in matches]
             for order_id in order_ids:
-                if order_id not in self.done_orders:
-                    # We've missed a fill, rectify that
-                    module_logger.info('Missed fill for {}'.format(order_id))
+                if order_id in self.opened_orders:
                     order = self.client.get_order(order_id)
                     # Done? Or just partially filled
                     if order['status'] == 'done' and order['done_reason'] == 'filled':
+                        # We've missed a fill, rectify that
+                        module_logger.info('Missed fill for {}'.format(order_id))
                         self.on_order_done({
                             'order_id': order_id,
                             'reason': order['done_reason'],
@@ -286,6 +289,7 @@ class Trader(WebSocketClient):
                         side, order_type, size, self.product_id, price, result['message']))
                 time.sleep(1)
             else:
+                self.cache_orders(result['id'])
                 module_logger.info(
                     'Placed {} {} order for {} {} @ {}'.format(side, order_type, size, self.product_id, price))
                 return
@@ -334,7 +338,7 @@ class Trader(WebSocketClient):
         reason = message['reason']
         if reason == 'filled':
             module_logger.info('Order {} done, with {} remaining'.format(order_id, reason))
-            self.cache_done(order_id)
+            self.remove_order(order_id)
             settled_order = self.wait_for_settle(order_id)
             self.reset_account_balances()
             self.place_next_orders(settled_order)
