@@ -3,7 +3,6 @@ import hashlib
 import hmac
 import json
 import logging
-import sys
 import time
 from datetime import datetime, timedelta
 
@@ -15,9 +14,13 @@ module_logger = logging.getLogger(__name__)
 
 
 class Trader(WebSocketClient):
-    def __init__(self, product_id, auth_client=None, api_key='', secret_key='', pass_phrase='', api_url='', ws_url=''):
+    def __init__(self, product_id, delta=0.01,
+                 auth_client=None, api_key='', secret_key='', pass_phrase='', api_url='', ws_url=''):
+        if delta > 0.05:
+            raise AlgoStateException('Delta very high @ {}, please check your config'.format(delta))
         self.last_heartbeat = datetime.now()
         self.heartbeat_log_interval = timedelta(minutes=2)
+        self.delta = delta
         self.product_id = product_id
         self.api_key = api_key
         self.secret_key = secret_key
@@ -25,7 +28,7 @@ class Trader(WebSocketClient):
         if auth_client is None:
             self.client = AuthenticatedClient(api_key, secret_key, pass_phrase, api_url=api_url)
         else:
-            self.client = auth_client
+            self.client = auth_client  # Easier to test via mock
 
         # Query for product and find status/increment
         products = self.client.get_products()
@@ -39,15 +42,13 @@ class Trader(WebSocketClient):
         self.quote_increment = float(product[0]['quote_increment'])
         self.base_min_size = float(product[0]['base_min_size'])
         self.base_max_size = float(product[0]['base_max_size'])
-        # Available funds for placing orders, updated on order placements and cancels
-        self.available_balance = {}
-        self.orders = {}
-
+        # Account information including ID and available balance
+        self.accounts = {}
         # Query for account balances
         self.reset_account_balances()
-
-        # Query for current open orders
-        self.reset_open_orders()
+        # Queue of last (1000ish) filled orders for checking missed fills
+        self.done_orders = []
+        # Bind to websocket
         if ws_url != '':
             WebSocketClient.__init__(self, ws_url)
 
@@ -77,6 +78,16 @@ class Trader(WebSocketClient):
         }
         self.send(json.dumps(params))
 
+    def closed(self, code, reason=None):
+        module_logger.info('Closed down. Code: {} Reason: {}'.format(code, reason))
+
+    def cache_done(self, order_id):
+        """Sliding window of IDs
+        """
+        self.done_orders.append(order_id)
+        if len(self.done_orders) > 1200:
+            self.done_orders.pop(0)
+
     def received_message(self, message):
         message = json.loads(str(message))
         message_type = message.get('type', '')
@@ -93,25 +104,63 @@ class Trader(WebSocketClient):
         else:
             module_logger.info(log_message)
             module_logger.info('Message type: {}'.format(message_type))
-            if message_type == 'match':
-                self.on_order_fill(message)
+            if message_type == 'done':
+                self.on_order_done(message)
 
     def check_missed_fills(self):
-        for order_id, order in self.orders.items():
-            order_status = self.client.get_order(order_id)
-            if float(order_status.get('filled_size', 0)) > float(order.get('filled_size', 0)):
-                # We've missed a fill, rectify that
-                module_logger.info('Missed fill for {}'.format(order_id))
-                message = {
-                    'maker_order_id': order_id,
-                    'price': order_status['executed_value'],
-                    'size': order_status['size'],
-                    'side': order_status['side'],
+        """Queries for transactions by going against account history api
+        https://docs.gdax.com/#get-account-history
+        [
+            {
+                "id": "100",
+                "created_at": "2014-11-07T08:19:27.028459Z",
+                "amount": "0.001",
+                "balance": "239.669",
+                "type": "fee",
+                "details": {
+                    "order_id": "d50ec984-77a8-460a-b958-66f114b0de9b",
+                    "trade_id": "74",
+                    "product_id": "BTC-USD"
                 }
-                self.on_order_fill(message)
-
-    def closed(self, code, reason=None):
-        module_logger.info('Closed down. Code: {} Reason: {}'.format(code, reason))
+            }
+        ]
+        https://docs.gdax.com/#get-an-order
+        {
+            "id": "68e6a28f-ae28-4788-8d4f-5ab4e5e5ae08",
+            "size": "1.00000000",
+            "product_id": "BTC-USD",
+            "side": "buy",
+            "stp": "dc",
+            "funds": "9.9750623400000000",
+            "specified_funds": "10.0000000000000000",
+            "type": "market",
+            "post_only": false,
+            "created_at": "2016-12-08T20:09:05.508883Z",
+            "done_at": "2016-12-08T20:09:05.527Z",
+            "done_reason": "filled",
+            "fill_fees": "0.0249376391550000",
+            "filled_size": "0.01291771",
+            "executed_value": "9.9750556620000000",
+            "status": "done",
+            "settled": true
+        }
+        """
+        accounts = [v['id'] for v in self.accounts.values()]
+        for account in accounts:
+            history = self.client.get_account_history(account)
+            matches = [x for x in history if x['type'] == 'match']
+            order_ids = [x['details']['order_id'] for x in matches]
+            for order_id in order_ids:
+                if order_id not in self.done_orders:
+                    # We've missed a fill, rectify that
+                    module_logger.info('Missed fill for {}'.format(order_id))
+                    order = self.client.get_order(order_id)
+                    # Done? Or just partially filled
+                    if order['status'] == 'done' and order['done_reason'] == 'filled':
+                        self.on_order_done({
+                            'order_id': order_id,
+                            'reason': order['done_reason'],
+                        })
 
     def reset_account_balances(self):
         """Query rest endpoint for available account balance
@@ -142,56 +191,12 @@ class Trader(WebSocketClient):
                 module_logger.error('Account lookup failure for {} from {}'.format(
                     currency, json.dumps(accounts, indent=4, sort_keys=True)))
                 raise AccountBalanceFailure(currency + ' not found in active accounts')
-            self.add_balance(currency, float(account[0]['available']))
+            self.accounts[currency] = {
+                'available': float(account[0]['available']),
+                'id': account[0]['id'],
+            }
             module_logger.info(
                 'Set available account balances: {}'.format(json.dumps(accounts, indent=4, sort_keys=True)))
-
-    def reset_open_orders(self):
-        """Query rest endpoint for all open orders.
-        https://docs.gdax.com/#place-a-new-order
-        [
-            {
-                "id": "d0c5340b-6d6c-49d9-b567-48c4bfca13d2",
-                "price": "0.10000000",
-                "size": "0.01000000",
-                "product_id": "BTC-USD",
-                "side": "buy",
-                "stp": "dc",
-                "type": "limit",
-                "time_in_force": "GTC",
-                "post_only": false,
-                "created_at": "2016-12-08T20:02:28.53864Z",
-                "fill_fees": "0.0000000000000000",
-                "filled_size": "0.00000000",
-                "executed_value": "0.0000000000000000",
-                "status": "open",
-                "settled": false
-            },
-            {
-                "id": "8b99b139-58f2-4ab2-8e7a-c11c846e3022",
-                "price": "1.00000000",
-                "size": "1.00000000",
-                "product_id": "BTC-USD",
-                "side": "buy",
-                "stp": "dc",
-                "type": "limit",
-                "time_in_force": "GTC",
-                "post_only": false,
-                "created_at": "2016-12-08T20:01:19.038644Z",
-                "fill_fees": "0.0000000000000000",
-                "filled_size": "0.00000000",
-                "executed_value": "0.0000000000000000",
-                "status": "open",
-                "settled": false
-            }
-        ]
-        """
-        orders = self.client.get_orders()[0]
-        self.orders = dict(zip([x['id'] for x in orders], orders))
-        module_logger.info(
-            'Set orders on {} with increment {} and {} open orders: {}'.format(
-                self.product_id, self.quote_increment, len(self.orders),
-                json.dumps(self.orders, indent=4, sort_keys=True)))
 
     def seed_wallet(self, quote_ccy_size):
         """At the start of the day or when the wallet is empty, need something to trade
@@ -204,11 +209,27 @@ class Trader(WebSocketClient):
                 'Unable to get market quote, api message: {}'.format(ticker.get('message', 'unknown error')))
         current_price = float(ticker['price'])
         size = self.to_size_increment(quote_ccy_size / current_price)
-        delta = current_price * 0.01
+        delta = current_price * self.delta
         module_logger.info(
             'Seeding wallet: {} {} @ {}/{}'.format(size, self.product_id, current_price + delta, current_price - delta))
         self.buy_stop(size, current_price + delta)
         self.buy_limit_ptc(size, current_price - delta)
+
+    def wait_for_settle(self, order_id):
+        """Funds aren't available until order is in settled state. Return the full order message
+        """
+        settled = False
+        order = None
+        while not settled:
+            order = self.client.get_order(order_id)
+            settled = order.get('settled', False)
+            if not settled:
+                module_logger.info('Waiting for {} to settled'.format(order_id))
+                time.sleep(0.4)
+        # Once we know order is settled, re-query account balances
+        self.reset_account_balances()
+        module_logger.info('{} settled'.format(order_id))
+        return order
 
     def place_decaying_order(self, side, order_type, size, price, retries=3, spread=0.006):
         """Makes a call to the rest order endpoint. On failure, tries again n times widening the bid/ask
@@ -218,10 +239,8 @@ class Trader(WebSocketClient):
         if size < self.base_min_size or size > self.base_max_size:
             raise OrderPlacementFailure('Size of {} outside of exchange limits'.format(size))
         if side is 'buy':
-            balance = self.get_balance(self.quote_currency)
             direction = -1
         elif side is 'sell':
-            balance = self.get_balance(self.base_currency)
             direction = 1
         else:
             raise OrderPlacementFailure('Side {} not expected, what are you doing?'.format(side))
@@ -229,10 +248,6 @@ class Trader(WebSocketClient):
         for i in range(retries):
             price = self.to_price_increment(price + (price * direction * i * spread))
             if side is 'buy':
-                if balance < size * price:
-                    module_logger.exception(
-                        'Insufficient funds for buy of {}, current balance {}'.format(size, balance))
-                    raise AccountBalanceFailure('Needed {} have {}'.format(size * price, balance))
                 if order_type is 'limit':
                     result = self.client.buy(
                         type='limit',
@@ -254,10 +269,6 @@ class Trader(WebSocketClient):
                 else:
                     raise OrderPlacementFailure('{} of type {} not supported'.format(side, order_type))
             else:
-                if balance < size:
-                    module_logger.exception(
-                        'Insufficient funds for sell of {}, current balance {}'.format(size, balance))
-                    raise AccountBalanceFailure('Needed {} have {}'.format(size, balance))
                 if order_type is 'limit':
                     result = self.client.sell(
                         type='limit',
@@ -275,14 +286,8 @@ class Trader(WebSocketClient):
                         side, order_type, size, self.product_id, price, result['message']))
                 time.sleep(1)
             else:
-                self.orders[result['id']] = result
                 module_logger.info(
                     'Placed {} {} order for {} {} @ {}'.format(side, order_type, size, self.product_id, price))
-                # Update account balances
-                if side is 'buy':
-                    self.add_balance(self.quote_currency, -1 * size * price)
-                else:
-                    self.add_balance(self.base_currency, -1 * size)
                 return
         # Failed on decaying price, raise an exception
         message = 'Error placing {} order of type {}. Retried {} times, giving up'.format(side, order_type, retries)
@@ -301,131 +306,49 @@ class Trader(WebSocketClient):
     def cancel_all(self):
         """BAIL!!!
         """
-        for order_id in self.orders:
+        orders = [x['id'] for x in self.client.get_orders()[0]]
+        for order_id in orders:
             result = self.client.cancel_order(order_id)
             module_logger.info(
                 'Canceling {}, result: {}'.format(order_id, json.dumps(result, indent=4, sort_keys=True)))
         # Call cancel all for good measure (don't think it actually works)
         self.client.cancel_all()
 
-        # Add back order size to available balance
-        for order in self.orders.values():
-            if order['side'] == 'buy':
-                self.add_balance(self.quote_currency, float(order['price']) * float(order['size']))
-            else:
-                self.add_balance(self.base_currency, float(order['size']))
-        self.orders = {}
-
-    def on_order_fill(self, message):
-        """Action to take on order match. Base implementation simply updates the order cache and currency balances.
-        Assumes messages come from the "user" channel documented in
-        https://docs.gdax.com/#the-code-classprettyprintfullcode-channel.
-
-        Any order_id's not saved already are assumed to be an error condition triggering a new call to the
-        authenticated rest endpoint.
-        Expects a json message of the below format:
-        Limit Sell where we are maker (side matches us):
+    def on_order_done(self, message):
+        """Action to take on order complete. Orders may be considered done even if they have a small amount
+        of remaining size. Base implementation blocks until order settles then resets account balances
         {
-            "maker_order_id": "1bb486ee-00c2-4136-b16a-702c79f94679",
-            "maker_profile_id": "da6d26a2-9618-47f9-a9c2-1f167ba166f7",
-            "maker_user_id": "bleh",
-            "price": "998.00000000",
+            "order_id": "6decaa0f-1a71-40c1-a665-4613e6312e9f",
             "product_id": "ETH-USD",
-            "profile_id": "da6d26a2-9618-47f9-a9c2-1f167ba166f7",
-            "sequence": 2061395972,
-            "side": "sell",
-            "size": "0.06780153",
-            "taker_order_id": "86ab4e20-383e-4b15-ac60-68291fa9572d",
-            "time": "2018-01-17T05:09:01.544000Z",
-            "trade_id": 26289716,
-            "type": "match",
-            "user_id": "bleh"
-        }
-        Stop BUY (note side flipped) where we are taker
-        {
-            "maker_order_id": "3b2ef64d-d14e-4507-b019-3fb27b98f1c3",
-            "price": "986.03000000",
-            "product_id": "ETH-USD",
-            "profile_id": "da6d26a2-9618-47f9-a9c2-1f167ba166f7",
-            "sequence": 2061692341,
-            "side": "sell",
-            "size": "0.01011134",
-            "taker_order_id": "05b0bd06-fe1a-4ef8-b984-594636fc7ecb",
-            "taker_profile_id": "da6d26a2-9618-47f9-a9c2-1f167ba166f7",
-            "taker_user_id": "bleh",
-            "time": "2018-01-17T05:24:14.048000Z",
-            "trade_id": 26291878,
-            "type": "match",
-            "user_id": "bleh"
+            "profile_id": "bleh",
+            "reason": "filled",
+            "remaining_size": "0.00007585",
+            "sequence": 2066310881,
+            "side": "buy",
+            "time": "2018-01-17T10:38:00.203000Z",
+            "type": "done",
+            "user_id": "bah"
         }
         """
-        try:
-            if 'type' not in message or message['type'] != 'match':
-                raise OrderFillFailure(
-                    'Unexpected type {}, resetting order/account status'.format(message.get('type', 'unknown')))
-            expected_keys = ['maker_order_id', 'taker_order_id', 'side', 'size', 'price']
-            checked_order_message = {}
-            for expected_key in expected_keys:
-                if expected_key not in message:
-                    raise OrderFillFailure(
-                        'Expected key {} not received in order message: {}'.format(
-                            expected_key, message))
-                else:
-                    checked_order_message[expected_key] = message[expected_key]
+        order_id = message['order_id']
+        reason = message['reason']
+        if reason == 'filled':
+            module_logger.info('Order {} done, with {} remaining'.format(order_id, reason))
+            self.cache_done(order_id)
+            settled_order = self.wait_for_settle(order_id)
+            self.reset_account_balances()
+            self.place_next_orders(settled_order)
 
-            # Check order id has been saved
-            order_id = checked_order_message['maker_order_id']
-            if order_id not in self.orders:
-                order_id = checked_order_message['taker_order_id']
-                if order_id not in self.orders:
-                    raise OrderFillFailure(
-                        'Maker OID {} or Taker OID {} not in saved orders'.format(
-                            checked_order_message['maker_order_id'], checked_order_message['taker_order_id']))
-
-            # Check fill price and remaining size
-            side = checked_order_message['side']
-            # Flip side if we were taker
-            if order_id == checked_order_message['taker_order_id']:
-                if side == 'buy':
-                    side = 'sell'
-                else:
-                    side = 'buy'
-                checked_order_message['side'] = side
-
-            price = float(checked_order_message['price'])
-            original = float(self.orders[order_id]['size'])
-            filled = float(checked_order_message['size'])
-            filled += float(self.orders[order_id].get('filled_size', 0))
-            remaining = original - filled
-            checked_order_message['order_id'] = order_id
-            checked_order_message['size'] = original
-            checked_order_message['filled_size'] = filled
-            module_logger.info('Order {} filled for {} {} {} @ {}, remaining {}'.format(
-                order_id, side, original, self.base_currency, price, remaining))
-            if remaining == 0:
-                self.orders.pop(order_id)
-            else:
-                self.orders[order_id]['filled_size'] = filled
-
-            if side == 'buy':
-                self.add_balance(self.base_currency, filled)
-            elif side == 'sell':
-                self.add_balance(self.quote_currency, filled * price)
-            else:
-                raise OrderFillFailure('Unexpected side {}'.format(side))
-
-            return checked_order_message
-
-        except OrderFillFailure as e:
-            module_logger.exception(e.parameter)
-            sys.exit(1)
+    def place_next_orders(self, message):
+        """Intended to be overriden. Main algo logic goes here
+        """
+        pass
 
     def get_balance(self, currency):
-        return self.available_balance.get(currency, 0.0)
-
-    def add_balance(self, currency, balance):
-        current = self.available_balance.get(currency, 0.0)
-        self.available_balance[currency] = self.to_size_increment(current + balance, base_currency=currency)
+        if currency in self.accounts:
+            return self.accounts[currency]['available']
+        else:
+            return 0.0
 
     def to_price_increment(self, price):
         """Round to nearest price increment.
@@ -443,6 +366,14 @@ class Trader(WebSocketClient):
             return round(size_base_ccy, 8)
         else:
             return round(size_base_ccy, 2)
+
+
+class AlgoStateException(Exception):
+    def __init__(self, value):
+        self.parameter = value
+
+    def __str__(self):
+        return repr(self.parameter)
 
 
 class OrderFillFailure(Exception):

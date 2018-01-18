@@ -9,26 +9,37 @@ class AuthenticatedClientRegression(object):
             {
                 'currency': 'USD',
                 'available': str(starting_balance),
+                'id': 1,
             },
             {
                 'currency': 'ETH',
                 'available': '0',
+                'id': 2,
             },
             {
                 'currency': 'BTC',
                 'available': '0',
+                'id': 3,
             },
             {
                 'currency': 'BTH',
                 'available': '0',
+                'id': 4,
             },
             {
                 'currency': 'LTC',
                 'available': '0',
+                'id': 5,
             },
         ]
         self.product_id = product_id
         self.last_rates = last_rates
+
+    def get_order(self, order_id):
+        order = [x for x in self.orders if x['id'] == order_id][0]
+        order['settled'] = True
+        order['filled_size'] = order['size']
+        return order
 
     def get_product_ticker(self, product_id):
         if self.product_id == product_id:
@@ -217,13 +228,6 @@ class AuthenticatedClientRegression(object):
 
     def get_orders(self):
         return [self.orders]
-
-    # noinspection PyMethodMayBeStatic
-    def get_order(self, order_id):
-        return {
-            'id': order_id,
-            'settled': True,
-        }
 
     def buy(self, **kwargs):
         return self.mock_trade('buy', kwargs['price'], kwargs['size'], kwargs['type'], kwargs.get('post_only', False))

@@ -10,6 +10,7 @@
   },
   "cost_basis": {
     "order_depth": 6,
-    "wallet_fraction": 0.13
+    "wallet_fraction": 0.13,
+    "delta": 0.01
   }
 }

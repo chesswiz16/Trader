@@ -8,7 +8,7 @@ from time import sleep
 import dateutil.parser
 
 from gdax.public_client import PublicClient
-from regression.authenticated_client_regression import AuthenticatedClientRegression
+from tests.authenticated_client_regression import AuthenticatedClientRegression
 from trader.cost_basis import CostBasisTrader
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
@@ -61,6 +61,7 @@ if __name__ == '__main__':
     fees = 0
     total_trades = 0
     fee_trades = 0
+    accounts = trader.accounts
     while current_time < end_time:
         next_time = current_time + time_delta
         module_logger.info('Running from {} to {}'.format(current_time, next_time))
@@ -77,17 +78,23 @@ if __name__ == '__main__':
                     )
                 )
                 total_trades += 1
+                size = float(order['size'])
+                price = float(order['price'])
                 if order['type'] == 'stop':
                     fee_trades += 1
-                    fees += 0.003 * float(order['size']) * float(order['price'])
-                trader.on_order_fill({
-                    'maker_order_id': order['id'],
-                    'taker_order_id': '',
-                    'type': 'match',
+                    fees += 0.003 * size * price
+                trader.place_next_orders({
+                    'id': order['id'],
                     'price': order['price'],
                     'side': order['side'],
-                    'size': order['size'],
+                    'filled_size': order['size'],
                 })
+                if order['side'] == 'buy':
+                    accounts[trader.base_currency]['available'] += size
+                    accounts[trader.quote_currency]['available'] -= price * size
+                else:
+                    accounts[trader.base_currency]['available'] -= size
+                    accounts[trader.quote_currency]['available'] += price * size
                 regression_client.last_rates = candle
         current_time = next_time
         sleep(1)
@@ -96,15 +103,13 @@ if __name__ == '__main__':
     trader.cancel_all()
 
     # What do we have left?
-    balances = trader.available_balance
-    module_logger.info('Ending orders:{}'.format(json.dumps(trader.orders, indent=4, sort_keys=True)))
-    module_logger.info('Ending balances:{}'.format(json.dumps(balances, indent=4, sort_keys=True)))
+    module_logger.info('Ending balances:{}'.format(json.dumps(accounts, indent=4, sort_keys=True)))
     total = 0
-    for currency, balance in balances.items():
+    for currency, balance in accounts.items():
         if currency == 'USD':
-            total += float(balance)
+            total += float(balance['available'])
         else:
-            total += float(balance) * last_high
+            total += float(balance['available']) * last_high
     module_logger.info('Made a total of {} trades'.format(total_trades))
     module_logger.info('Incurred {:,.2f} on {} feed trades'.format(fees, fee_trades))
     module_logger.info('Total sell balance @ {}: {:,.2f}'.format(last_high, total - fees))
