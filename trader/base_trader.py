@@ -104,11 +104,9 @@ class Trader(WebSocketClient):
             else:
                 module_logger.debug(log_message)
         # Order fill message
-        else:
+        elif message_type == 'done':
             module_logger.info(log_message)
-            module_logger.info('Message type: {}'.format(message_type))
-            if message_type == 'done':
-                self.on_order_done(message)
+            self.on_order_done(message)
 
     def check_missed_fills(self):
         """Queries for transactions by going against account history api
@@ -198,7 +196,7 @@ class Trader(WebSocketClient):
                 'available': float(account[0]['available']),
                 'id': account[0]['id'],
             }
-            module_logger.info(
+            module_logger.debug(
                 'Set available account balances: {}'.format(json.dumps(accounts, indent=4, sort_keys=True)))
 
     def seed_wallet(self, quote_ccy_size):

@@ -8,7 +8,7 @@ from gdax.authenticated_client import AuthenticatedClient
 if __name__ == '__main__':
 
     if len(sys.argv) == 1:
-        file = 'config/sandbox.json'
+        file = 'config/prod.json'
     else:
         file = sys.argv[1]
 

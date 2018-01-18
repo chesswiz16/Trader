@@ -2,6 +2,7 @@
   <dictionary name="Tiger">
     <words>
       <w>algo</w>
+      <w>formatters</w>
       <w>hmac</w>
       <w>passphrase</w>
       <w>periodially</w>
