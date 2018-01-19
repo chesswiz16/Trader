@@ -57,6 +57,7 @@ if __name__ == '__main__':
         try:
             total = 0.0
             accounts = auth_client.get_accounts()
+            message_parts = []
             for account in accounts:
                 balance = float(account['balance'])
                 if balance > 0:
@@ -65,8 +66,9 @@ if __name__ == '__main__':
                         product = '{}-USD'.format(currency)
                         ask = float(auth_client.get_product_ticker(product)['ask'])
                         balance = balance * ask
+                        message_parts.append('{:,.2f} {} @ {}'.format(balance, currency, ask))
                     total += balance
-            module_logger.info('{:,.2f}'.format(total))
+            module_logger.info('{:,.2f}|{}'.format(total, '|'.join(message_parts)))
             sleep(300)
         except KeyboardInterrupt:
             running = False
