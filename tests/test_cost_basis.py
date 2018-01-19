@@ -23,6 +23,7 @@ class TestCostBasis(unittest.TestCase):
         trader.on_order_done({
             'order_id': limit_order['id'],
             'reason': 'filled',
+            'product_id': 'ETH-USD',
         })
         self.assertEqual(trader.current_order_depth, 1)
         self.assertEqual(trader.quote_currency_paid, 10 * 99.0)
@@ -50,6 +51,7 @@ class TestCostBasis(unittest.TestCase):
         trader.on_order_done({
             'order_id': buy_order['id'],
             'reason': 'filled',
+            'product_id': 'ETH-USD',
         })
         self.assertEqual(trader.current_order_depth, 2)
         self.assertEqual(trader.quote_currency_paid, 1990.0081117005002)
@@ -77,6 +79,7 @@ class TestCostBasis(unittest.TestCase):
         trader.on_order_done({
             'order_id': buy_order['id'],
             'reason': 'filled',
+            'product_id': 'ETH-USD',
         })
         self.assertEqual(trader.current_order_depth, 3)
         self.assertEqual(trader.quote_currency_paid, 2990.0390111807)
@@ -104,6 +107,7 @@ class TestCostBasis(unittest.TestCase):
         trader.on_order_done({
             'order_id': buy_order['id'],
             'reason': 'filled',
+            'product_id': 'ETH-USD',
         })
         self.assertEqual(trader.current_order_depth, 4)
         self.assertEqual(trader.quote_currency_paid, 3990.0163606274)
@@ -190,6 +194,7 @@ class TestCostBasis(unittest.TestCase):
                 'size': '20',
                 'price': '101.0',
                 'type': 'stop',
+                'product_id': 'ETH-USD',
                 'post_only': False,
             },
             {
@@ -198,6 +203,7 @@ class TestCostBasis(unittest.TestCase):
                 'size': '20',
                 'price': '99.0',
                 'type': 'limit',
+                'product_id': 'ETH-USD',
                 'post_only': True,
             },
         ]
@@ -218,6 +224,7 @@ class TestCostBasis(unittest.TestCase):
                 'size': '20',
                 'price': '101.0',
                 'type': 'limit',
+                'product_id': 'ETH-USD',
                 'post_only': True,
             },
             {
@@ -226,6 +233,7 @@ class TestCostBasis(unittest.TestCase):
                 'size': '20',
                 'price': '99.0',
                 'type': 'limit',
+                'product_id': 'ETH-USD',
                 'post_only': True,
             },
         ]
@@ -246,6 +254,7 @@ class TestCostBasis(unittest.TestCase):
                 'size': '20',
                 'price': '101.0',
                 'type': 'limit',
+                'product_id': 'ETH-USD',
                 'post_only': True,
             },
         ]
@@ -266,6 +275,7 @@ class TestCostBasis(unittest.TestCase):
                 'size': '20',
                 'price': '99.0',
                 'type': 'limit',
+                'product_id': 'ETH-USD',
                 'post_only': True,
             },
         ]
@@ -285,6 +295,7 @@ class TestCostBasis(unittest.TestCase):
                 'size': '20',
                 'price': '101.0',
                 'type': 'limit',
+                'product_id': 'ETH-USD',
                 'post_only': True,
             },
             {
@@ -293,6 +304,7 @@ class TestCostBasis(unittest.TestCase):
                 'size': '20',
                 'price': '99.0',
                 'type': 'limit',
+                'product_id': 'ETH-USD',
                 'post_only': True,
             },
             {
@@ -301,6 +313,7 @@ class TestCostBasis(unittest.TestCase):
                 'size': '20',
                 'price': '99.0',
                 'type': 'limit',
+                'product_id': 'ETH-USD',
                 'post_only': True,
             },
         ]

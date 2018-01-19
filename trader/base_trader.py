@@ -19,7 +19,7 @@ class Trader(WebSocketClient):
         if delta > 0.05:
             raise AlgoStateException('Delta very high @ {}, please check your config'.format(delta))
         self.last_heartbeat = datetime.now()
-        self.heartbeat_log_interval = timedelta(minutes=2)
+        self.heartbeat_log_interval = timedelta(minutes=5)
         self.delta = delta
         self.product_id = product_id
         self.api_key = api_key
@@ -93,11 +93,15 @@ class Trader(WebSocketClient):
 
     def received_message(self, message):
         message = json.loads(str(message))
+        # Ignore messages for different products since we're subscribing to user channel
+        if message.get('product_id', '') != self.product_id:
+            return
         message_type = message.get('type', '')
         log_message = 'Message from websocket:{}'.format(json.dumps(message, indent=4, sort_keys=True))
         if message_type == 'heartbeat':
             if self.last_heartbeat + self.heartbeat_log_interval <= datetime.now():
-                module_logger.info(log_message)
+                module_logger.info(
+                    'Heartbeat from exchange:{}:{} orders'.format(message.get('sequence', 0), len(self.get_orders())))
                 self.last_heartbeat = datetime.now()
                 # Also take opportunity to check for missed messages
                 self.check_missed_fills()
@@ -150,6 +154,7 @@ class Trader(WebSocketClient):
         for account in accounts:
             history = self.client.get_account_history(account)[0]
             matches = [x for x in history if x['type'] == 'match']
+            matches = [x for x in matches if x['details']['product_id'] == self.product_id]
             order_ids = [x['details']['order_id'] for x in matches]
             for order_id in order_ids:
                 if order_id in self.opened_orders:
@@ -226,7 +231,7 @@ class Trader(WebSocketClient):
             settled = order.get('settled', False)
             if not settled:
                 module_logger.info('Waiting for {} to settled'.format(order_id))
-                time.sleep(0.4)
+                time.sleep(1)  # Takes a few seconds
         # Once we know order is settled, re-query account balances
         self.reset_account_balances()
         module_logger.info('{} settled'.format(order_id))
@@ -305,10 +310,13 @@ class Trader(WebSocketClient):
     def sell_limit_ptc(self, size, price, retries=3, spread=0.003):
         self.place_decaying_order('sell', 'limit', size, price, retries=retries, spread=spread)
 
+    def get_orders(self):
+        return [x for x in self.client.get_orders()[0] if x['product_id'] == self.product_id]
+
     def cancel_all(self):
         """BAIL!!!
         """
-        orders = [x['id'] for x in self.client.get_orders()[0]]
+        orders = [x['id'] for x in self.get_orders()]
         for order_id in orders:
             result = self.client.cancel_order(order_id)
             module_logger.info(
@@ -334,12 +342,17 @@ class Trader(WebSocketClient):
         """
         order_id = message['order_id']
         reason = message['reason']
-        if reason == 'filled':
+        if reason == 'filled' and message['product_id'] == self.product_id:
             module_logger.info('Order {} done, with {} remaining'.format(order_id, reason))
             self.remove_order(order_id)
             settled_order = self.wait_for_settle(order_id)
             self.reset_account_balances()
             self.place_next_orders(settled_order)
+
+    def on_start(self):
+        """Intended to be overriden.
+        """
+        pass
 
     def place_next_orders(self, message):
         """Intended to be overriden. Main algo logic goes here
@@ -365,7 +378,7 @@ class Trader(WebSocketClient):
         if base_currency == '':
             base_currency = self.base_currency
         if base_currency in ['BTC', 'ETH', 'LTC', 'BCH']:
-            return round(size_base_ccy, 8)
+            return max(round(size_base_ccy, 8), self.base_min_size)
         else:
             return round(size_base_ccy, 2)
 

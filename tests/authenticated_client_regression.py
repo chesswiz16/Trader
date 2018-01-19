@@ -57,6 +57,7 @@ class AuthenticatedClientRegression(object):
             'size': str(size),
             'side': side,
             'type': order_type,
+            'product_id': self.product_id,
             'post_only': post_only,
         }
         self.orders.append(order)

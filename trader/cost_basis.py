@@ -83,10 +83,11 @@ class CostBasisTrader(Trader):
             }
         ]
         """
+        Trader.on_start()
         self.current_order_depth = 0
         self.quote_currency_paid = 0.0
         self.base_currency_bought = 0.0
-        orders = self.client.get_orders()[0]
+        orders = self.get_orders()
         try:
             stop_orders = [x for x in orders if x.get('type', '') == 'stop']
             limit_orders = [x for x in orders if x.get('type', '') == 'limit']
