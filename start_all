@@ -16,9 +16,9 @@ then
     sleep 5
 fi
 
-ps aux | grep "python3 balance_logger.py config/sandbox.json &" | grep -v grep > /dev/null
+ps aux | grep "python3 balance_logger.py config/prod.json &" | grep -v grep > /dev/null
 if [ $? != 0 ]
 then
     echo "Starting balance logger"
-    python3 balance_logger.py config/sandbox.json & > /dev/null
+    python3 balance_logger.py config/prod.json & > /dev/null
 fi
