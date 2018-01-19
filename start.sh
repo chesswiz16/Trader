@@ -10,5 +10,5 @@ fi
 ps aux | grep "python3 balance_logger.py config/sandbox.json &" | grep -v grep > /dev/null
 if [ $? != 0 ]
 then
-    python3 python3 balance_logger.py config/sandbox.json &
+    python3 balance_logger.py config/sandbox.json &
 fi
