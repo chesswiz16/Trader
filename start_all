@@ -1,24 +1,26 @@
 #!/bin/bash
-crontab -l | perl -nle 's/^#\s*([0-9*])/$1/;print' | crontab
-ps aux | grep "python3 start_cost_basis.py config/prod.json ETH-USD" | grep -v grep > /dev/null
+
+ps aux | grep "start_cost_basis.py" | grep "config/prod.json" | grep "ETH-USD" | grep -v grep > /dev/null
 if [ $? != 0 ]
 then
     echo "Starting ETH"
-    python3 start_cost_basis.py config/prod.json ETH-USD & > /dev/null
+    python3 /root/Trader/start_cost_basis.py /root/Trader/config/prod.json ETH-USD & > /dev/null
     sleep 5
 fi
 
-ps aux | grep "python3 start_cost_basis.py config/prod.json LTC-USD" | grep -v grep > /dev/null
+ps aux | grep "start_cost_basis.py" | grep "config/prod.json" | grep "LTC-USD" | grep -v grep > /dev/null
 if [ $? != 0 ]
 then
     echo "Starting LTC"
-    python3 start_cost_basis.py config/prod.json LTC-USD & > /dev/null
+    python3 /root/Trader/start_cost_basis.py /root/Trader/config/prod.json LTC-USD & > /dev/null
     sleep 5
 fi
 
-ps aux | grep "python3 balance_logger.py config/prod.json" | grep -v grep > /dev/null
+ps aux | grep "balance_logger.py" grep | "config/prod.json" | grep -v grep > /dev/null
 if [ $? != 0 ]
 then
     echo "Starting balance logger"
-    python3 balance_logger.py config/prod.json & > /dev/null
+    python3 /root/Trader/balance_logger.py /root/Trader/config/prod.json & > /dev/null
 fi
+
+crontab -l | perl -nle 's/^#\s*([0-9*])/$1/;print' | crontab
