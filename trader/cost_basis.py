@@ -96,7 +96,7 @@ class CostBasisTrader(Trader):
             # With two open orders, we either failed right after seeding or in the middle of the algo
             elif len(orders) == 2:
                 if len(stop_orders) == 1 and len(limit_orders) == 1:
-                    module_logger.info('Recovered with seeding orders')
+                    module_logger.info('{}|Recovered with seeding orders'.format(self.product_id))
                 elif len(limit_orders) == 2:
                     # Work out what cost basis was from the sell (current sell was 1% above cost basis)
                     sell_orders = [x for x in limit_orders if x.get('side', '') == 'sell']
@@ -110,7 +110,7 @@ class CostBasisTrader(Trader):
                     self.reset_from_sell(sell_orders)
                 elif len(buy_orders) == 1:
                     # If we only have the buy, cancel it and reseed
-                    module_logger.info('Found one open buy order, canceling and reseeding')
+                    module_logger.info('{}|Found one open buy order, canceling and reseeding'.format(self.product_id))
                     self.cancel_all()
                     Trader.seed_wallet(self, self.get_order_size())
                 else:
@@ -118,12 +118,12 @@ class CostBasisTrader(Trader):
             else:
                 raise AlgoStateException('Unexpected order state:{}'.format(orders))
         except (OrderPlacementFailure, AccountBalanceFailure) as e:
-            module_logger.error('BAILING. Failed to seed wallet, canceling all open orders')
+            module_logger.error('{}|BAILING. Failed to seed wallet, canceling all open orders'.format(self.product_id))
             self.cancel_all()
             raise e
         except AlgoStateException:
-            module_logger.warning('Unexpected order state: {}, canceling all and seeding'.format(
-                json.dumps(orders, indent=4, sort_keys=True)))
+            module_logger.warning('{}|Unexpected order state: {}, canceling all and seeding'.format(
+                self.product_id, json.dumps(orders, indent=4, sort_keys=True)))
             self.cancel_all()
             Trader.seed_wallet(self, self.get_order_size())
 
@@ -137,10 +137,8 @@ class CostBasisTrader(Trader):
         self.quote_currency_paid = self.base_currency_bought * cost_basis
         # Guess at the order depth. If my math was better I'm sure we could be more accurate
         self.current_order_depth = math.floor(self.quote_currency_paid / self.get_order_size())
-        module_logger.info(
-            'Recovered with cost basis: {} ccy bought: {} price paid: {} order depth: {}'.format(
-                cost_basis, self.base_currency_bought, self.quote_currency_paid, self.current_order_depth
-            ))
+        module_logger.info('{}|Recovered with cost basis: {} ccy bought: {} price paid: {} order depth: {}'.format(
+            self.product_id, cost_basis, self.base_currency_bought, self.quote_currency_paid, self.current_order_depth))
 
     def place_next_orders(self, settled_order):
         """Meat of the logic, place new orders as described in __init__.
@@ -178,16 +176,12 @@ class CostBasisTrader(Trader):
             self.quote_currency_paid += price * filled_size
             self.base_currency_bought += filled_size
             cost_basis = self.quote_currency_paid / self.base_currency_bought
-            module_logger.info(
-                'Order Depth: {}, Cost Basis: {} ({}/{}), targeting {}/{}'.format(
-                    self.current_order_depth,
-                    cost_basis,
-                    self.quote_currency_paid,
-                    self.base_currency_bought,
-                    cost_basis * (1 + self.delta),
-                    cost_basis * (1 - self.delta),
-                )
-            )
+            module_logger.info('{}|Order Depth: {}, Cost Basis: {} ({}/{}), targeting {}/{}'.format(
+                self.product_id, self.current_order_depth, cost_basis, self.quote_currency_paid,
+                self.base_currency_bought,
+                cost_basis * (1 + self.delta),
+                cost_basis * (1 - self.delta),
+            ))
             # Place sell at delta above current cost basis
             self.sell_limit_ptc(self.base_currency_bought, cost_basis * (1 + self.delta))
             if self.current_order_depth > self.max_order_depth:

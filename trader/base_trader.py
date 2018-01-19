@@ -79,7 +79,7 @@ class Trader(WebSocketClient):
         self.send(json.dumps(params))
 
     def closed(self, code, reason=None):
-        module_logger.info('Closed down. Code: {} Reason: {}'.format(code, reason))
+        module_logger.info('{}|Closed down. Code: {} Reason: {}'.format(self.product_id, code, reason))
 
     def cache_orders(self, order_id):
         """Sliding window of IDs
@@ -97,12 +97,13 @@ class Trader(WebSocketClient):
         if message.get('product_id', '') != self.product_id:
             return
         message_type = message.get('type', '')
-        log_message = 'Message from websocket:{}'.format(json.dumps(message, indent=4, sort_keys=True))
+        log_message = '{}|Message from websocket:{}'.format(self.product_id,
+                                                            json.dumps(message, indent=4, sort_keys=True))
         if message_type == 'heartbeat':
             if self.last_heartbeat + self.heartbeat_log_interval <= datetime.now():
                 orders = self.get_orders()
                 module_logger.info(
-                    'Heartbeat:{}:{} orders'.format(message.get('sequence', 0), len(orders)))
+                    '{}|Heartbeat:{}:{} orders'.format(self.product_id, message.get('sequence', 0), len(orders)))
                 self.last_heartbeat = datetime.now()
                 # Also take opportunity to check for missed messages
                 self.check_missed_fills()
@@ -163,7 +164,7 @@ class Trader(WebSocketClient):
                     # Done? Or just partially filled
                     if order['status'] == 'done' and order['done_reason'] == 'filled':
                         # We've missed a fill, rectify that
-                        module_logger.info('Missed fill for {}'.format(order_id))
+                        module_logger.info('{}|Missed fill for {}'.format(self.product_id, order_id))
                         self.on_order_done({
                             'order_id': order_id,
                             'reason': order['done_reason'],
@@ -218,7 +219,8 @@ class Trader(WebSocketClient):
         size = self.to_size_increment(quote_ccy_size / current_price)
         delta = current_price * self.delta
         module_logger.info(
-            'Seeding wallet: {} {} @ {}/{}'.format(size, self.product_id, current_price + delta, current_price - delta))
+            '{}|Seeding wallet: {} {} @ {}/{}'.format(self.product_id, size, self.product_id, current_price + delta,
+                                                      current_price - delta))
         self.buy_stop(size, current_price + delta)
         self.buy_limit_ptc(size, current_price - delta)
 
@@ -231,11 +233,11 @@ class Trader(WebSocketClient):
             order = self.client.get_order(order_id)
             settled = order.get('settled', False)
             if not settled:
-                module_logger.info('Waiting for {} to settled'.format(order_id))
+                module_logger.info('{}|Waiting for {} to settled'.format(self.product_id, order_id))
                 time.sleep(1)  # Takes a few seconds
         # Once we know order is settled, re-query account balances
         self.reset_account_balances()
-        module_logger.info('{} settled'.format(order_id))
+        module_logger.info('{}|{} settled'.format(self.product_id, order_id))
         return order
 
     def place_decaying_order(self, side, order_type, size, price, retries=3, spread=0.006):
@@ -295,10 +297,11 @@ class Trader(WebSocketClient):
             else:
                 self.cache_orders(result['id'])
                 module_logger.info(
-                    'Placed {} {} order for {} {} @ {}'.format(side, order_type, size, self.product_id, price))
+                    '{}|Placed {} {} order {} @ {}'.format(self.product_id, side, order_type, size, price))
                 return
         # Failed on decaying price, raise an exception
-        message = 'Error placing {} order of type {}. Retried {} times, giving up'.format(side, order_type, retries)
+        message = '{}|Error placing {} order of type {}. Retried {} times, giving up'.format(self.product_id, side,
+                                                                                             order_type, retries)
         module_logger.exception(message)
         raise OrderPlacementFailure(message)
 
@@ -320,8 +323,8 @@ class Trader(WebSocketClient):
         orders = [x['id'] for x in self.get_orders()]
         for order_id in orders:
             result = self.client.cancel_order(order_id)
-            module_logger.info(
-                'Canceling {}, result: {}'.format(order_id, json.dumps(result, indent=4, sort_keys=True)))
+            module_logger.info('{}|Canceling {}, result: {}'.format(self.product_id, order_id,
+                                                                    json.dumps(result, indent=4, sort_keys=True)))
 
     def on_order_done(self, message):
         """Action to take on order complete. Orders may be considered done even if they have a small amount
@@ -342,7 +345,7 @@ class Trader(WebSocketClient):
         order_id = message['order_id']
         reason = message['reason']
         if reason == 'filled' and message['product_id'] == self.product_id:
-            module_logger.info('Order {} {}'.format(order_id, reason))
+            module_logger.info('{}|Order {} {}'.format(self.product_id, order_id, reason))
             self.remove_order(order_id)
             settled_order = self.wait_for_settle(order_id)
             self.reset_account_balances()
