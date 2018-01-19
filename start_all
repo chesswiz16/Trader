@@ -1,5 +1,6 @@
 #!/bin/bash
 
+PATH=/usr/bin:/bin:/root/Trader
 ps aux | grep "start_cost_basis.py" | grep "config/prod.json" | grep "ETH-USD" | grep -v grep > /dev/null
 if [ $? != 0 ]
 then
@@ -16,7 +17,7 @@ then
     sleep 5
 fi
 
-ps aux | grep "balance_logger.py" grep | "config/prod.json" | grep -v grep > /dev/null
+ps aux | grep "balance_logger.py" | grep "config/prod.json" | grep -v grep > /dev/null
 if [ $? != 0 ]
 then
     echo "Starting balance logger"

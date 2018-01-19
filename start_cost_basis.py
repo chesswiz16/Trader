@@ -29,7 +29,7 @@ if __name__ == '__main__':
                 'level': 'INFO',
                 'class': 'logging.handlers.TimedRotatingFileHandler',
                 'formatter': 'standard',
-                'filename': 'cost_basis_{}.log'.format(product_id),
+                'filename': '/root/Trader/cost_basis_{}.log'.format(product_id),
                 'when': 'midnight',
                 'interval': 1,
                 'backupCount': 5

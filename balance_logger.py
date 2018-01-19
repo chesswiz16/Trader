@@ -20,7 +20,7 @@ logging.config.dictConfig({
             'level': 'INFO',
             'class': 'logging.handlers.TimedRotatingFileHandler',
             'formatter': 'standard',
-            'filename': 'balances.log',
+            'filename': '/root/Trader/balances.log',
             'when': 'midnight',
             'interval': 1,
             'backupCount': 5
