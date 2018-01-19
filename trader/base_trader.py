@@ -102,7 +102,7 @@ class Trader(WebSocketClient):
             if self.last_heartbeat + self.heartbeat_log_interval <= datetime.now():
                 orders = self.get_orders()
                 module_logger.info(
-                    'Heartbeat from exchange:{}:{} orders'.format(message.get('sequence', 0), orders))
+                    'Heartbeat from exchange:{}:{} orders'.format(message.get('sequence', 0), len(orders)))
                 self.last_heartbeat = datetime.now()
                 # If an order was canceled and we didn't do it, reset our status
                 if len([x for x in orders if x['side'] == 'sell']) == 0 and len(orders) < 2:

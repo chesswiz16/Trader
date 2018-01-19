@@ -1,3 +1,3 @@
 #!/bin/bash
-crontab -l | awk '{print "# "$1}' | crontab
+crontab -l | perl -nle 's/^([^#])/# $1/;print' | crontab
 pkill -f python3
