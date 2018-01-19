@@ -16,11 +16,6 @@ logging.config.dictConfig({
         },
     },
     'handlers': {
-        'default': {
-            'level': 'INFO',
-            'formatter': 'standard',
-            'class': 'logging.StreamHandler',
-        },
         'file': {
             'level': 'INFO',
             'class': 'logging.handlers.TimedRotatingFileHandler',
@@ -33,7 +28,7 @@ logging.config.dictConfig({
     },
     'loggers': {
         '': {
-            'handlers': ['default', 'file'],
+            'handlers': ['file'],
             'level': 'INFO',
             'propagate': True
         },
