@@ -168,6 +168,7 @@ class Trader(WebSocketClient):
                         self.on_order_done({
                             'order_id': order_id,
                             'reason': order['done_reason'],
+                            'product_id': self.product_id,
                         })
 
     def reset_account_balances(self):
