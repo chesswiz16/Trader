@@ -66,7 +66,7 @@ if __name__ == '__main__':
                         product = '{}-USD'.format(currency)
                         ask = float(auth_client.get_product_ticker(product)['ask'])
                         balance = balance * ask
-                        if balance < 1:
+                        if balance > 1:
                             message_parts.append('{:,.2f} {} @ {}'.format(balance, currency, ask))
                     total += balance
             module_logger.info('{:,.2f}|{}'.format(total, '|'.join(message_parts)))
