@@ -83,7 +83,7 @@ class CostBasisTrader(Trader):
             }
         ]
         """
-        Trader.on_start()
+        Trader.on_start(self)
         self.current_order_depth = 0
         self.quote_currency_paid = 0.0
         self.base_currency_bought = 0.0
