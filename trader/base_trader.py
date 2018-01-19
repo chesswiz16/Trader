@@ -100,9 +100,17 @@ class Trader(WebSocketClient):
         log_message = 'Message from websocket:{}'.format(json.dumps(message, indent=4, sort_keys=True))
         if message_type == 'heartbeat':
             if self.last_heartbeat + self.heartbeat_log_interval <= datetime.now():
+                orders = self.get_orders()
                 module_logger.info(
-                    'Heartbeat from exchange:{}:{} orders'.format(message.get('sequence', 0), len(self.get_orders())))
+                    'Heartbeat from exchange:{}:{} orders'.format(message.get('sequence', 0), orders))
                 self.last_heartbeat = datetime.now()
+                # If an order was canceled and we didn't do it, reset our status
+                if len([x for x in orders if x['side'] == 'sell']) == 0 and len(orders) < 2:
+                    # Sleep a few seconds to give any pending messages time to propagate
+                    time.sleep(2)
+                    # Still in a weird state? Reset orders.
+                    if len([x for x in orders if x['side'] == 'sell']) == 0 and len(orders) < 2:
+                        self.on_start()
                 # Also take opportunity to check for missed messages
                 self.check_missed_fills()
             else:
@@ -321,8 +329,6 @@ class Trader(WebSocketClient):
             result = self.client.cancel_order(order_id)
             module_logger.info(
                 'Canceling {}, result: {}'.format(order_id, json.dumps(result, indent=4, sort_keys=True)))
-        # Call cancel all for good measure (don't think it actually works)
-        self.client.cancel_all()
 
     def on_order_done(self, message):
         """Action to take on order complete. Orders may be considered done even if they have a small amount
