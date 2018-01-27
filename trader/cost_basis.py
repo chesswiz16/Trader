@@ -192,7 +192,6 @@ class CostBasisTrader(Trader):
             cost_basis * (1 + self.delta),
             cost_basis * (1 - self.delta),
         ))
-        self.place_bracket_orders()
         # Place sell at delta above current cost basis
         self.sell_limit_ptc(self.base_currency_bought, cost_basis * (1 + self.delta))
         if self.current_order_depth > self.max_order_depth:
