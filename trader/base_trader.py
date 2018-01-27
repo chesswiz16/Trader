@@ -115,6 +115,8 @@ class Trader(WebSocketClient):
                 # Also take opportunity to check for missed messages
                 self.check_missed_fills()
                 if not self.is_filling_order:
+                    # Refresh orders first in case we filled
+                    orders = self.get_orders()
                     self.check_orders(orders)
 
             else:
