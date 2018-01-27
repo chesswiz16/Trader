@@ -34,12 +34,21 @@ if __name__ == '__main__':
                 'interval': 1,
                 'backupCount': 5
             },
+            'file_debug': {
+                'level': 'DEBUG',
+                'class': 'logging.handlers.TimedRotatingFileHandler',
+                'formatter': 'standard',
+                'filename': '/root/Trader/cost_basis_{}.log.debug'.format(product_id),
+                'when': 'midnight',
+                'interval': 1,
+                'backupCount': 5
+            },
         },
         'loggers': {
             '': {
-                'handlers': ['file'],
+                'handlers': ['file', 'file_debug'],
                 'level': 'INFO',
-                'propagate': True
+                'propagate': False
             },
         },
     })
@@ -56,7 +65,7 @@ if __name__ == '__main__':
         ws_url=data['endpoints']['socket'],
     )
     try:
-        trader.on_start()
+        # trader.on_start()
         trader.connect()
         trader.run_forever()
     except KeyboardInterrupt:

@@ -140,6 +140,13 @@ class CostBasisTrader(Trader):
         module_logger.info('{}|Recovered with cost basis: {} ccy bought: {} price paid: {} order depth: {}'.format(
             self.product_id, cost_basis, self.base_currency_bought, self.quote_currency_paid, self.current_order_depth))
 
+    def check_orders(self, orders):
+        Trader.check_orders(self)
+        if len(orders) < 2 and self.current_order_depth <= self.max_order_depth:
+            # We're missing an order, reset based on known cost basis
+            module_logger.warning('{}|Unexpected order state, recovering'.format(self.product_id))
+            self.place_bracket_orders()
+
     def place_next_orders(self, settled_order):
         """Meat of the logic, place new orders as described in __init__.
         Passed the last filled AND settled order message
@@ -175,23 +182,27 @@ class CostBasisTrader(Trader):
             filled_size = float(settled_order['filled_size'])
             self.quote_currency_paid += price * filled_size
             self.base_currency_bought += filled_size
-            cost_basis = self.quote_currency_paid / self.base_currency_bought
-            module_logger.info('{}|Order Depth: {}, Cost Basis: {} ({}/{}), targeting {}/{}'.format(
-                self.product_id, self.current_order_depth, cost_basis, self.quote_currency_paid,
-                self.base_currency_bought,
-                cost_basis * (1 + self.delta),
-                cost_basis * (1 - self.delta),
-            ))
-            # Place sell at delta above current cost basis
-            self.sell_limit_ptc(self.base_currency_bought, cost_basis * (1 + self.delta))
-            if self.current_order_depth > self.max_order_depth:
-                module_logger.warning('At max order depth, not doing anything (leaving sell out)')
-            else:
-                # Place buy at price and size to move cost basis down by delta
-                next_cost_basis = cost_basis * (1 - self.delta)
-                target_base_quantity = (self.quote_currency_paid + self.get_order_size()) / next_cost_basis
-                next_size = target_base_quantity - self.base_currency_bought
-                self.buy_limit_ptc(next_size, self.get_order_size() / next_size)
+            self.place_bracket_orders()
+
+    def place_bracket_orders(self):
+        cost_basis = self.quote_currency_paid / self.base_currency_bought
+        module_logger.info('{}|Order Depth: {}, Cost Basis: {} ({}/{}), targeting {}/{}'.format(
+            self.product_id, self.current_order_depth, cost_basis, self.quote_currency_paid,
+            self.base_currency_bought,
+            cost_basis * (1 + self.delta),
+            cost_basis * (1 - self.delta),
+        ))
+        self.place_bracket_orders()
+        # Place sell at delta above current cost basis
+        self.sell_limit_ptc(self.base_currency_bought, cost_basis * (1 + self.delta))
+        if self.current_order_depth > self.max_order_depth:
+            module_logger.warning('At max order depth, not doing anything (leaving sell out)')
+        else:
+            # Place buy at price and size to move cost basis down by delta
+            next_cost_basis = cost_basis * (1 - self.delta)
+            target_base_quantity = (self.quote_currency_paid + self.get_order_size()) / next_cost_basis
+            next_size = target_base_quantity - self.base_currency_bought
+            self.buy_limit_ptc(next_size, self.get_order_size() / next_size)
 
 
 if __name__ == '__main__':

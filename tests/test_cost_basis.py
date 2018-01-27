@@ -102,6 +102,33 @@ class TestCostBasis(unittest.TestCase):
         }
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in auth_client_mock.orders])
 
+        # Unknown order, ignore
+        trader.on_order_done({
+            'order_id': 'dummy',
+            'reason': 'filled',
+            'product_id': 'ETH-USD',
+        })
+        self.assertEqual(trader.current_order_depth, 3)
+        self.assertEqual(trader.quote_currency_paid, 2990.0390111807)
+        self.assertEqual(trader.base_currency_bought, 30.81520154)
+        self.assertEqual(len(auth_client_mock.orders), 2)
+        expected = {
+            'side': 'sell',
+            'size': '30.81520154',
+            'price': '98.0',
+            'type': 'limit',
+            'post_only': True,
+        }
+        self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in auth_client_mock.orders])
+        expected = {
+            'side': 'buy',
+            'size': '10.72131821',
+            'price': '93.27',
+            'type': 'limit',
+            'post_only': True,
+        }
+        self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in auth_client_mock.orders])
+
         # 4 deep, sell should go out but no buy
         buy_order = [x for x in auth_client_mock.orders if x['side'] == 'buy'][0]
         trader.on_order_done({

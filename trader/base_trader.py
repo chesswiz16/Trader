@@ -48,6 +48,8 @@ class Trader(WebSocketClient):
         self.reset_account_balances()
         # Queue of last (1000ish) filled orders for checking missed fills
         self.opened_orders = []
+        # Flag for when we're waiting for an order to settle, ignore HB/state reconcilation requests
+        self.is_filling_order = False
         # Bind to websocket
         if ws_url != '':
             WebSocketClient.__init__(self, ws_url)
@@ -102,17 +104,31 @@ class Trader(WebSocketClient):
         if message_type == 'heartbeat':
             if self.last_heartbeat + self.heartbeat_log_interval <= datetime.now():
                 orders = self.get_orders()
-                module_logger.info(
+                module_logger.debug(
                     '{}|Heartbeat:{}:{} orders'.format(self.product_id, message.get('sequence', 0), len(orders)))
+                for order in orders:
+                    module_logger.debug(
+                        '{}|{} {} @ {}:{}'.format(self.product_id, order['side'], order['size'], order['price'],
+                                                  order['id']))
                 self.last_heartbeat = datetime.now()
                 # Also take opportunity to check for missed messages
                 self.check_missed_fills()
+                if not self.is_filling_order:
+                    self.check_orders(orders)
+
             else:
                 module_logger.debug(log_message)
         # Order fill message
         elif message_type == 'done':
             module_logger.info(log_message)
+            self.is_filling_order = True
             self.on_order_done(message)
+            self.is_filling_order = False
+
+    def check_orders(self, orders):
+        """Validate that we have the proper orders set for our current status
+        """
+        pass
 
     def check_missed_fills(self):
         """Queries for transactions by going against account history api
@@ -347,10 +363,13 @@ class Trader(WebSocketClient):
         reason = message['reason']
         if reason == 'filled' and message['product_id'] == self.product_id:
             module_logger.info('{}|Order {} {}'.format(self.product_id, order_id, reason))
-            self.remove_order(order_id)
-            settled_order = self.wait_for_settle(order_id)
-            self.reset_account_balances()
-            self.place_next_orders(settled_order)
+            if order_id not in self.opened_orders:
+                module_logger.info('{}|Order not in cached orders, ignoreing'.format(self.product_id))
+            else:
+                self.remove_order(order_id)
+                settled_order = self.wait_for_settle(order_id)
+                self.reset_account_balances()
+                self.place_next_orders(settled_order)
 
     def on_start(self):
         """Intended to be overriden.
