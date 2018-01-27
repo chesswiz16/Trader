@@ -34,19 +34,10 @@ if __name__ == '__main__':
                 'interval': 1,
                 'backupCount': 5
             },
-            'file_debug': {
-                'level': 'DEBUG',
-                'class': 'logging.handlers.TimedRotatingFileHandler',
-                'formatter': 'standard',
-                'filename': '/root/Trader/cost_basis_{}.log.debug'.format(product_id),
-                'when': 'midnight',
-                'interval': 1,
-                'backupCount': 5
-            },
         },
         'loggers': {
             '': {
-                'handlers': ['file', 'file_debug'],
+                'handlers': ['file'],
                 'level': 'INFO',
                 'propagate': False
             },

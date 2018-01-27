@@ -104,10 +104,10 @@ class Trader(WebSocketClient):
         if message_type == 'heartbeat':
             if self.last_heartbeat + self.heartbeat_log_interval <= datetime.now():
                 orders = self.get_orders()
-                module_logger.debug(
+                module_logger.info(
                     '{}|Heartbeat:{}:{} orders'.format(self.product_id, message.get('sequence', 0), len(orders)))
                 for order in orders:
-                    module_logger.debug(
+                    module_logger.info(
                         '{}|{} {} @ {}:{}'.format(self.product_id, order['side'], order['size'], order['price'],
                                                   order['id']))
                 self.last_heartbeat = datetime.now()
