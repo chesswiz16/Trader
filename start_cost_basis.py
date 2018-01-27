@@ -65,7 +65,7 @@ if __name__ == '__main__':
         ws_url=data['endpoints']['socket'],
     )
     try:
-        # trader.on_start()
+        trader.on_start()
         trader.connect()
         trader.run_forever()
     except KeyboardInterrupt:
