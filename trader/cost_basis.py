@@ -141,7 +141,7 @@ class CostBasisTrader(Trader):
             self.product_id, cost_basis, self.base_currency_bought, self.quote_currency_paid, self.current_order_depth))
 
     def check_orders(self, orders):
-        Trader.check_orders(self)
+        Trader.check_orders(self, orders)
         if len(orders) < 2 and self.current_order_depth <= self.max_order_depth:
             # We're missing an order, reset based on known cost basis
             module_logger.warning('{}|Unexpected order state, recovering'.format(self.product_id))
