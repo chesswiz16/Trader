@@ -47,7 +47,7 @@ class Trader(WebSocketClient):
         # Query for account balances
         self.reset_account_balances()
         # Queue of last (1000ish) filled orders for checking missed fills
-        self.opened_orders = self.get_orders()
+        self.opened_orders = [x['id'] for x in self.get_orders()]
         module_logger.info('{}|Startup with orders {}'.format(self.product_id, ', '.join(self.opened_orders)))
         # Flag for when we're waiting for an order to settle, ignore HB/state reconciliation requests
         self.is_filling_order = False
