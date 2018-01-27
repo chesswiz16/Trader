@@ -9,26 +9,31 @@ class AuthenticatedClientRegression(object):
             {
                 'currency': 'USD',
                 'available': str(starting_balance),
+                'balance': str(starting_balance),
                 'id': 1,
             },
             {
                 'currency': 'ETH',
                 'available': '0',
+                'balance': '0',
                 'id': 2,
             },
             {
                 'currency': 'BTC',
                 'available': '0',
+                'balance': '0',
                 'id': 3,
             },
             {
                 'currency': 'BTH',
                 'available': '0',
+                'balance': '0',
                 'id': 4,
             },
             {
                 'currency': 'LTC',
                 'available': '0',
+                'balance': '0',
                 'id': 5,
             },
         ]

@@ -180,7 +180,7 @@ class TestCostBasis(unittest.TestCase):
             'post_only': True,
         }
         self.assertIn(expected, [{k: x[k] for k in expected.keys()} for x in auth_client_mock.orders])
-        wallet_value = trader.get_balance('USD')
+        wallet_value = trader.get_available_balance('USD')
         for order in auth_client_mock.orders:
             wallet_value += float(order['size']) * float(order['price'])
         # Make sure we actually made money...
@@ -192,11 +192,13 @@ class TestCostBasis(unittest.TestCase):
             {
                 'currency': 'ETH',
                 'available': '0',
+                'balance': '0',
                 'id': '1',
             },
             {
                 'currency': 'USD',
                 'available': '10000',
+                'balance': '10000',
                 'id': '2',
             },
         ])

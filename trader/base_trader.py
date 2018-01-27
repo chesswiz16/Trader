@@ -213,12 +213,13 @@ class Trader(WebSocketClient):
         accounts = self.client.get_accounts()
         for currency in [self.base_currency, self.quote_currency]:
             account = [x for x in accounts if x['currency'] == currency]
-            if len(account) != 1 or 'available' not in account[0]:
+            if len(account) != 1 or 'available' not in account[0] or 'balance' not in account[0]:
                 module_logger.error('Account lookup failure for {} from {}'.format(
                     currency, json.dumps(accounts, indent=4, sort_keys=True)))
                 raise AccountBalanceFailure(currency + ' not found in active accounts')
             self.accounts[currency] = {
                 'available': float(account[0]['available']),
+                'balance': float(account[0]['balance']),
                 'id': account[0]['id'],
             }
             module_logger.debug(
@@ -382,9 +383,15 @@ class Trader(WebSocketClient):
         """
         pass
 
-    def get_balance(self, currency):
+    def get_available_balance(self, currency):
         if currency in self.accounts:
             return self.accounts[currency]['available']
+        else:
+            return 0.0
+
+    def get_balance(self, currency):
+        if currency in self.accounts:
+            return self.accounts[currency].get('balance', self.get_available_balance(currency))
         else:
             return 0.0
 

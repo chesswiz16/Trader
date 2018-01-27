@@ -42,7 +42,8 @@ class CostBasisTrader(Trader):
         self.wallet_fraction = wallet_fraction
 
     def get_order_size(self):
-        return self.get_balance(self.quote_currency) * self.wallet_fraction
+        return min(self.get_available_balance(self.quote_currency),
+                   self.get_balance(self.quote_currency) * self.wallet_fraction)
 
     def on_start(self):
         """Check outstanding orders, if we don't have 2, then place seeding orders
@@ -195,12 +196,16 @@ class CostBasisTrader(Trader):
         # Place sell at delta above current cost basis
         self.sell_limit_ptc(self.base_currency_bought, cost_basis * (1 + self.delta))
         if self.current_order_depth > self.max_order_depth:
-            module_logger.warning('At max order depth, not doing anything (leaving sell out)')
+            module_logger.warning(
+                '{}|At max order depth, not doing anything (leaving sell out)'.format(self.product_id))
         else:
             # Place buy at price and size to move cost basis down by delta
             next_cost_basis = cost_basis * (1 - self.delta)
             target_base_quantity = (self.quote_currency_paid + self.get_order_size()) / next_cost_basis
             next_size = target_base_quantity - self.base_currency_bought
+            if next_size < self.base_min_size:
+                module_logger.warning(
+                    '{}|Insufficient account balance to buy more, leaving sell out'.format(self.product_id))
             self.buy_limit_ptc(next_size, self.get_order_size() / next_size)
 
 
