@@ -47,7 +47,7 @@ class Trader(WebSocketClient):
         # Query for account balances
         self.reset_account_balances()
         # Queue of last (1000ish) filled orders for checking missed fills
-        self.opened_orders = []
+        self.opened_orders = self.get_orders()
         # Flag for when we're waiting for an order to settle, ignore HB/state reconcilation requests
         self.is_filling_order = False
         # Bind to websocket
@@ -364,7 +364,7 @@ class Trader(WebSocketClient):
         if reason == 'filled' and message['product_id'] == self.product_id:
             module_logger.info('{}|Order {} {}'.format(self.product_id, order_id, reason))
             if order_id not in self.opened_orders:
-                module_logger.info('{}|Order not in cached orders, ignoreing'.format(self.product_id))
+                module_logger.info('{}|Order not in cached orders, ignoring'.format(self.product_id))
             else:
                 self.remove_order(order_id)
                 settled_order = self.wait_for_settle(order_id)
