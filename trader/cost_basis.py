@@ -90,7 +90,7 @@ class CostBasisTrader(Trader):
         self.base_currency_bought = 0.0
         orders = self.get_orders()
         try:
-            stop_orders = [x for x in orders if x.get('type', '') == 'stop']
+            stop_orders = [x for x in orders if x.get('stop', '') == 'entry']
             limit_orders = [x for x in orders if x.get('type', '') == 'limit']
             if len(orders) == 0:
                 Trader.seed_wallet(self, self.get_order_size())
@@ -133,7 +133,7 @@ class CostBasisTrader(Trader):
             raise AlgoStateException(
                 'Unexpected order state:{}'.format(sell_order))
         sell_order = sell_order[0]
-        cost_basis = float(sell_order['price']) / (1 + self.delta)
+        cost_basis = float(self.get_order_price(sell_order)) / (1 + self.delta)
         self.base_currency_bought = float(sell_order['size'])
         self.quote_currency_paid = self.base_currency_bought * cost_basis
         # Guess at the order depth. If my math was better I'm sure we could be more accurate

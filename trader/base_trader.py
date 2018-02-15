@@ -109,7 +109,8 @@ class Trader(WebSocketClient):
                     '{}|Heartbeat:{}:{} orders'.format(self.product_id, message.get('sequence', 0), len(orders)))
                 for order in orders:
                     module_logger.info(
-                        '{}|{} {} @ {}:{}'.format(self.product_id, order['side'], order['size'], order['price'],
+                        '{}|{} {} @ {}:{}'.format(self.product_id, order['side'], order['size'],
+                                                  self.get_order_price(order),
                                                   order['id']))
                 self.last_heartbeat = datetime.now()
                 # Also take opportunity to check for missed messages
@@ -127,6 +128,13 @@ class Trader(WebSocketClient):
             self.is_filling_order = True
             self.on_order_done(message)
             self.is_filling_order = False
+
+    @staticmethod
+    def get_order_price(order):
+        if 'stop_price' in order:
+            return order['stop_price']
+        else:
+            return order['price']
 
     def check_orders(self, orders):
         """Validate that we have the proper orders set for our current status
