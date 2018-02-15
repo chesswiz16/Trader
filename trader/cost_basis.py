@@ -174,9 +174,17 @@ class CostBasisTrader(Trader):
             self.on_start()
         else:
             # We've bought some, what's our order depth and cost basis?
+            module_logger.info('{}|Filled order:{}'.format(
+                self.product_id, json.dumps(settled_order, indent=4, sort_keys=True)))
             self.current_order_depth += 1
-            price = float(settled_order['price'])
             filled_size = float(settled_order['filled_size'])
+            if 'price' in settled_order:
+                price = float(settled_order['price'])
+            else:
+                # Back into price from filled size and value
+                executed_value = float(settled_order['executed_value'])
+                price = executed_value / filled_size
+
             self.quote_currency_paid += price * filled_size
             self.base_currency_bought += filled_size
             self.place_bracket_orders()
